@@ -11,7 +11,7 @@
 - Rust API Guidelines (https://rust-lang.github.io/api-guidelines/). Naming and module structure.
 - Microsoft Rust guidelines (https://github.com/microsoft/rust-guidelines). Error handling and API design input for D-007.
 - Corgea "Rust Best Practices 2026: Security, Idioms and Error Handling" (https://corgea.com/learn/rust-security-best-practices). Best-practices article: lints declared in `Cargo.toml`, `cargo audit` / `cargo deny` policy, unwrap policy. Context for [standards.md](standards.md) and [quality.md](quality.md).
-- Bielefeld University Rust slides. Teaching reference for ownership and concurrency basics. No stable public URL found; retained pending a durable link (propose one via a tech issue).
+- Bielefeld University "Good practices in Rust" slides (https://gi.cebitec.uni-bielefeld.de/_media/teaching/2025summer/rust/good_practices.pdf). Teaching reference for ownership and concurrency basics.
 - dasifefe Rust game-development frameworks list (https://github.com/dasifefe/rust-game-development-frameworks). Index used to cross-check the sources above.
 - bevy.org documentation (https://bevy.org/learn/). Compared for the Bevy 0.19 evaluation in [stack.md](stack.md); source of the f32 `Transform` limit and the roughly 3-month release cadence cited there.
 - Bevy GitHub issues #20998 (https://github.com/bevyengine/bevy/issues/20998, mobile support under-staffed), #23754 (https://github.com/bevyengine/bevy/issues/23754, Pixel 10 PowerVR-class GPU-driven-culling crash), #19358 (https://github.com/bevyengine/bevy/issues/19358, iOS 60 fps cap). Mobile-risk evidence cited in [stack.md](stack.md) and [mobile.md](mobile.md).

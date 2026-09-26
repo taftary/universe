@@ -22,7 +22,7 @@ Every crate inherits workspace dependencies and lints:
 workspace = true
 ```
 
-Every non-engine crate (`game`, `debug`, `tools`, tests) adds `#![forbid(unsafe_code)]` at its crate root. `engine` keeps the workspace `deny` value below and justifies each use with a per-item `#[expect(unsafe_code, reason = "...")]` (see Unsafe below).
+Non-engine crates forbid `unsafe_code` at the crate root; `engine` justifies each use per item (see Unsafe below).
 
 ## Naming and API design
 
