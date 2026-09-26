@@ -226,9 +226,9 @@ Everything is hand-placed from published reference data. There is no generation.
 ### 8.3 Scope
 
 - One star, as a point with real mass.
-- One planet, Mars-like: real radius, mass, surface gravity, rotation, and a thin carbon-dioxide atmosphere with a reference pressure and temperature profile by altitude. Chosen because reference data is abundant and unambiguous; swappable for another archetype without changing the MVP's structure.
+- One planet, Mars-like: real radius, mass, surface gravity, rotation, and a thin carbon-dioxide atmosphere with a reference pressure and temperature profile by altitude. Chosen because reference data is abundant and unambiguous; swappable for another archetype without changing the MVP's structure. Locked anchors and profile per D-015/D-016; constants and reference values are in 8.4.
 - No moons, no other bodies.
-- Player controls a point-ship: prograde and retrograde burns, time-warp from 1x to 10,000x under the Section 2 rules, atmospheric entry, descent to the surface grid, landing, ascent back to a stable orbit.
+- Player controls a point-ship: prograde and retrograde burns, time-warp from 1x to 10,000x under the Section 2 rules, atmospheric entry, descent to the surface grid, landing, ascent back to a stable orbit. The Section 6 ship trajectory uses the same body gravity `g(z)` as the atmosphere pressure integration, so orbit and atmosphere share one gravity field.
 
 ### 8.4 Required Readouts
 
@@ -243,6 +243,21 @@ All derived from one continuous model across the three regimes (orbit, atmospher
 - Heating proxy during entry
 - g-load
 - Mission elapsed time and current warp factor
+
+Reference model (D-015/D-016). Analytic hydrostatic profile anchored on the NASA Mars Fact Sheet; Mars Climate Database is a validation envelope only.
+
+| Constant | Value | Source |
+| --- | --- | --- |
+| Surface pressure `p0` | 610 Pa | NASA Mars Fact Sheet (D-015) |
+| Surface temperature `T0` | 210 K | NASA Mars Fact Sheet (D-015) |
+| Body radius `R` | 3389500 m | NASA Mars Fact Sheet (D-015) |
+| Surface gravity `g0` | 3.71 m/s2 | NASA Mars Fact Sheet (D-015) |
+| Body mass `M` | 6.4171e23 kg | NASA Mars Fact Sheet (D-015) |
+| Temperature gradient `L1` | -0.0012 K/m to 50 km, 150 K above | D-016 |
+| Gravity profile `g(z)` | `g0 * (R / (R + z))^2` | D-016 |
+| Cutoff / taper | 120 km cutoff, 100-120 km linear taper to exactly 0, `C0`-exact | D-016 |
+
+Reference values from the locked profile: 610 Pa / 210 K at the surface; 224.4 Pa within 5 percent at one scale height (10695 m); about 2.6 Pa at 50 km; about 0.005 Pa at 100 km; exactly 0 at 120 km. Profile is `C0`-continuous on 0-120000 m with monotonic pressure and density.
 
 ### 8.5 Explicitly Cut
 

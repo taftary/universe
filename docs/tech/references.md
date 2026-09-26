@@ -24,6 +24,9 @@
 - Arm ASTC guide (https://developer.arm.com/documentation/102162/latest/). Texture format choice in [mobile.md](mobile.md).
 - Android texture compression docs (https://developer.android.com/games/optimize/textures). ETC2 default rationale in [mobile.md](mobile.md).
 - kvark wgpu notes (https://hackmd.io/@kvark/rust-gfx). Backend behavior and GLES fallback context for D-003.
+- NASA Mars Fact Sheet (https://nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html). Anchor for the D-015 reference planet: p0 610 Pa, T0 210 K, R 3389500 m, g0 3.71 m/s2, M 6.4171e23 kg; detail in [simulation.md](simulation.md).
+- Mars Climate Database (https://www-mars.lmd.jussieu.fr/). Validation envelope only for the D-015/D-016 analytic profile, never an input; detail in [simulation.md](simulation.md).
+- CODATA 2018 via Tiesinga et al., Rev. Mod. Phys. 93 (2021). Source of `GRAVITATIONAL_CONSTANT_M3_KG_S2 = 6.67430e-11 m3/(kg s2)` used by `BodyParams::gravity_at_altitude` for the D-016 `g(z)` profile.
 
 ## Rejected (one-line reason each)
 

@@ -34,6 +34,8 @@ rand_core = "0.10"
 rand_xoshiro = "0.8"
 # D-014 snapshot hash (xxh3-64); xxh3 feature only.
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
+# D-017 deterministic math (pure-Rust libm) for sim transcendentals; see docs/tech/simulation.md.
+libm = "0.2"
 universe-engine = { path = "crates/engine" }
 universe-game = { path = "crates/game" }
 

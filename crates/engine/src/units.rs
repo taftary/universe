@@ -256,6 +256,11 @@ impl_units!(@plain
     Kilograms(value_kg)
 );
 
+impl_units!(@plain
+    /// Density in kilograms per cubic meter; range is unbounded and construction never fails.
+    KilogramsPerCubicMeter(value_kg_per_m3)
+);
+
 impl_units!(@ranged
     /// Temperature in kelvin; rejects negatives below absolute zero.
     Kelvin(value_kelvin_f64)
