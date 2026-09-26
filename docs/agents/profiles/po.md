@@ -44,11 +44,17 @@ Owns the vision and the scope. Decides what the game is and is not, arbitrates b
 - [ ] Issue has a goal, player value and acceptance criteria.
 - [ ] Issue is mapped to a pillar and a milestone.
 - [ ] `README.md` is updated if the vision or roadmap changed.
+- [ ] A reviewer profile (not the author) has commented on the issue.
 
 ## Self-update rule
 
-See [_template.md](_template.md#self-update-rule).
+When this profile detects that its instructions are missing, wrong or misaligned with the repository (a reference moved, a rule contradicts a decision, a needed skill is absent):
+
+1. Edit this file to fix the gap. Keep the change minimal and specific.
+2. Append a dated line to the Changelog below stating what changed and why.
+3. Mention the change in the current issue comment, or open a `type:change` + `area:process` issue if it is significant.
 
 ## Changelog
 
 - 2026-09-26: created.
+- 2026-09-26: inline Self-update rule from _template.md; add reviewer to Definition of done (#12).

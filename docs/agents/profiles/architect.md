@@ -48,9 +48,14 @@ Owns the structure of the software: module boundaries, data flow, the single set
 
 ## Self-update rule
 
-See [_template.md](_template.md#self-update-rule).
+When this profile detects that its instructions are missing, wrong or misaligned with the repository (a reference moved, a rule contradicts a decision, a needed skill is absent):
+
+1. Edit this file to fix the gap. Keep the change minimal and specific.
+2. Append a dated line to the Changelog below stating what changed and why.
+3. Mention the change in the current issue comment, or open a `type:change` + `area:process` issue if it is significant.
 
 ## Changelog
 
 - 2026-09-26: created.
 - 2026-09-26: point must-read at docs/tech/stack.md, architecture.md, simulation.md.
+- 2026-09-26: inline Self-update rule from _template.md (#12).
