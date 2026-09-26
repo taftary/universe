@@ -30,7 +30,7 @@ If the classification is ambiguous, ask the user one short question before conti
 
 Run the **Preflight** section of [gh-orchestrator.md](gh-orchestrator.md). It returns one of:
 
-- `gh-available` — continue to step 3 with issue tracking enabled.
+- `gh-available` — gh installed, authenticated with project scope, repo correct, project exists. Continue to step 3 with issue tracking enabled.
 - `gh-declined` — the user refused to install or authenticate `gh`. **End this orchestrator.** Tell the user the work will proceed without issue tracking, then hand the request directly to [process-orchestrator.md](process-orchestrator.md) with `tracking: off`. No git write operations are performed in this mode.
 - `gh-pending` — the user is installing; wait and re-run preflight. Do not start work.
 
@@ -69,6 +69,11 @@ When process-orchestrator reports done, verify:
 - [ ] ## Decisions has no line ending with open.
 - [ ] A step-done comment exists per Step in ## Subtasks.
 - [ ] Closing comment posts the filled Close checklist plus commit sha and docs touched.
+- [ ] Branch created via gh issue develop and visible in Development panel.
+- [ ] PR body contains Closes #nn; PR has type:/area: labels and milestone.
+- [ ] All PR checks green at merge; fix attempts recorded as CI FAIL attempt k/2 comments + follow-up Steps.
+- [ ] PR squash-merged, branch deleted, local main fast-forwarded.
+- [ ] Project item Status Done and status:done label both set.
 
 Report to the user: issue number, files touched, next suggested step.
 

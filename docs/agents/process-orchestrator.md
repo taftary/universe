@@ -34,14 +34,14 @@ If nothing matches, lead is `analyst` to shape the request first.
 
 Every profile follows this order. Skip a step only if the brief's `type` makes it meaningless (e.g. `type:idea` stops after **plan**).
 
-| Step | Who | Output | Issue status |
-| --- | --- | --- | --- |
-| 1. Draft | lead | one-paragraph goal + open questions, in the issue body | `status:draft` |
-| 2. Plan | lead + support | subtask checklist, acceptance criteria, Decisions, docs to update — all in issue body | `status:planned` |
-| 3. Implement | lead (or dev when code) | artefacts changed | `status:in-progress` |
-| 4. Review / test | tester or techlead (never the author) | review comment with one PASS/FAIL line per AC, checks pass | `status:review` |
-| 5. Docs | lead | documents mapped to `area:` updated | `status:review` |
-| 6. Close | orchestrator via gh-orchestrator | closing comment, commit references `#nn` | `status:done` |
+| Step | Who | Output | Issue status | Project | Development |
+| --- | --- | --- | --- | --- | --- |
+| 1. Draft | lead | one-paragraph goal + open questions, in the issue body | `status:draft` | Draft | — |
+| 2. Plan | lead + support | subtask checklist, acceptance criteria, Decisions, docs to update — all in issue body | `status:planned` | Planned | — |
+| 3. Implement | lead (or dev when code) | artefacts changed | `status:in-progress` | In progress | branch linked via `gh issue develop` + draft PR with `Closes #nn` |
+| 4. Review / test | tester or techlead (never the author) | review comment with one PASS/FAIL line per AC, checks pass | `status:review` | Review | CI watch loop (`gh pr checks --watch --fail-fast`, max 2 fix attempts) |
+| 5. Docs | lead | documents mapped to `area:` updated | `status:review` | Review | docs commits on same branch |
+| 6. Close | orchestrator via gh-orchestrator | closing comment, commit references `#nn` | `status:done` | Done | merge when checks green (`gh pr ready`, squash merge) |
 
 With `tracking: off` the same steps run but outputs are reported to the user instead of written to an issue, and no git write operations occur.
 
@@ -51,6 +51,7 @@ Each step boundary follows this order: profile returns -> gh-orchestrator ticks 
 
 - Step 2 (Plan) writes acceptance criteria into the body `## Acceptance criteria` and resolves open questions into `## Decisions`. Any question still open means `status:blocked` (no `status:in-progress` with open questions).
 - Step 4 (Review) output is one PASS/FAIL line per AC; the reviewer ticks passing ones via the Update acceptance criteria recipe; any FAIL adds a follow-up Step and returns to `status:in-progress`.
+- Label + Project Status flip together: every `status:` label change and its matching Project Status change run in the same gh-orchestrator step; never one without the other.
 - The plan comment is a pointer only; the body is single source of truth.
 
 ## Depth-1 execution
@@ -90,11 +91,13 @@ after: <prior Step N or - if none>
 done when: <acceptance criterion>
 ```
 
-Handoff note: implementation briefs cite `docs/tech/standards.md` for layout, lints, and performance rules.
+Handoff note: implementation briefs cite `docs/tech/standards.md` for layout, lints, and performance rules. Implementation briefs for CI failures include the failed log excerpt.
 
 ## Blocked
 
 If a profile cannot proceed (missing decision, missing data, conflicting docs, open Decision at end of Plan): set `status:blocked`, comment the blocker on the issue, and return to the orchestrator with the question for the user.
+
+CI failures that exhaust the 2-attempt cap set `status:blocked` with matching Project Status `Blocked`, record the failed log excerpt in a comment, and return to the user.
 
 ## Retroactivity
 
@@ -115,3 +118,4 @@ If a request keeps landing on the wrong profile, or a needed profile does not ex
 - 2026-09-26: all 14 profiles invocable via adapters in .opencode/agent/ and .claude/agents/; lifecycle table added to README; retroactivity rule added (#9).
 - 2026-09-26: define depth-1 execution, DAG wait rule, files-vs-gh split, and issue subtask plan format (#10); fix sequencer wording per #10 audit.
 - 2026-09-26: enforce per-step gh-orchestrator cadence, body AC+Decisions sections, per-AC review verdicts with FAIL->follow-up Step (#15).
+- 2026-09-26: Project mirror + Development linkage + CI watch loop (max 2) in sequence (#16).
