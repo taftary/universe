@@ -45,6 +45,26 @@ Every profile follows this order. Skip a step only if the brief's `type` makes i
 
 With `tracking: off` the same steps run but outputs are reported to the user instead of written to an issue, and no git write operations occur.
 
+## Depth-1 execution
+
+The top orchestrator is the sequencer; process-orchestrator executes its sequence. Only the top orchestrator spawns subagents. Subagents never spawn subagents. Execution depth is 1.
+
+## Task DAG
+
+Steps form a DAG via `after:` and `files:`. Related means same issue chain (linked by `after:`) or overlapping `files:`; the later step waits for the earlier step to finish. This matches the `same issue or overlapping files` rule in orchestrator.md. Steps with disjoint `files:` and no `after:` link may run in parallel.
+
+## Files vs gh split
+
+Profile tasks edit files only. All issue, label, branch, commit, and push operations go through gh-orchestrator. Profiles never perform gh or git writes; they return file changes and request tracking updates through the handoff brief.
+
+## Plan location
+
+The plan must live in issue subtasks. Step 2 of the standard sequence writes one checklist line per step in the tracking issue:
+
+`- [ ] Step N (owner:<profile>, files:<paths>, after:<prior>)`
+
+Use `after:-` when there is no prior step.
+
 ## Handoff brief
 
 When passing work between profiles, use this block so context is never lost:
@@ -55,6 +75,8 @@ to: <profile>
 issue: #<nn>
 ask: <one sentence>
 inputs: <files, numbers, constraints>
+files: <paths this step edits>
+after: <prior Step N or - if none>
 done when: <acceptance criterion>
 ```
 
@@ -81,3 +103,4 @@ If a request keeps landing on the wrong profile, or a needed profile does not ex
 - 2026-09-26: created.
 - 2026-09-26: add tech-stack routing row and standards.md handoff note.
 - 2026-09-26: all 14 profiles invocable via adapters in .opencode/agent/ and .claude/agents/; lifecycle table added to README; retroactivity rule added (#9).
+- 2026-09-26: define depth-1 execution, DAG wait rule, files-vs-gh split, and issue subtask plan format (#10); fix sequencer wording per #10 audit.
