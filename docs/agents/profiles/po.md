@@ -17,7 +17,7 @@ Owns the vision and the scope. Decides what the game is and is not, arbitrates b
 ## Inputs
 
 - The request and any related open issues (`gh issue list --label agent:po`).
-- `README.md` pillars and roadmap; `docs/specs.md` for current detail.
+- `README.md` pillars and roadmap; `docs/specs.md` spine and `docs/topics/` for current detail.
 - Analyst reports when deciding priorities.
 
 ## Outputs
@@ -31,7 +31,7 @@ Owns the vision and the scope. Decides what the game is and is not, arbitrates b
 
 - Product thinking for simulation games; reference points: Kerbal Space Program, Outer Wilds, Project Zomboid.
 - Scope discipline for solo development: prefer narrow, provable slices.
-- Must read: `README.md`, `docs/specs.md` sections 1-3, `docs/milestones/README.md`.
+- Must read: `README.md`, `docs/specs.md` spine (§§1-2), `docs/topics/scale.md`, `docs/milestones/README.md`.
 
 ## Working rules
 

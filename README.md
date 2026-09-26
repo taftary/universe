@@ -114,9 +114,9 @@ These remain part of the intended game but are explicitly deferred. Each depends
 ## Current State of the Project
 
 - **Scale system:** Redefined into Observable (Lv1–2) and Navigable (Lv3–8) groups. The stage-0 cosmic web prototype (v0.3.2) is retained as a Lv1–2 backdrop asset, no longer a traversable layer.
-- **Survival system:** The v1 four-stat design is superseded by the body model in Pillar 2. Detailed physiology spec not yet written.
+- **Survival system:** The v1 four-stat design is superseded by the body model in Pillar 2. The model is outlined in `docs/topics/survival.md`; equations and constants are not yet written.
 - **Planet generation:** Pipeline defined at the outline level (Pillar 3). Not implemented.
-- **Resources and extraction:** Defined in specs.md Section 7 — ten tracked substances, eight processes with energy costs, availability by archetype, two deliberate realism concessions. Not implemented.
+- **Resources and extraction:** Defined in `docs/topics/resources.md` — ten tracked substances, eight processes with energy costs, availability by archetype, two deliberate realism concessions. Not implemented.
 - **Machines:** Requirements defined (Pillar 4). Not designed in detail.
 - **Tech stack:** Decided in M0. See `docs/tech.md` and `docs/tech/` (`stack.md`, `architecture.md`, `simulation.md`, `persistence.md`, `standards.md`, `quality.md`, `mobile.md`, `references.md`). The README commits to a performance budget, not an engine; the budget lives in `docs/tech/quality.md`.
 - **Not started:** Everything below the design level.
@@ -137,8 +137,8 @@ Each stage adds one major unproven system at a time, so failures are easy to iso
 ## Companion Documents
 
 - **[docs/README.md](docs/README.md)** — index of all project documentation.
-- **[docs/specs.md](docs/specs.md)** — detailed spec (Draft v0.3). Matches this README; Section 7 holds the resource and extraction model.
-- **[docs/tech.md](docs/tech.md)** — locked stack decisions D-001..D-008 with detail in `docs/tech/`.
+- **[docs/specs.md](docs/specs.md)** — design spine (v0.4 split-into-topics). Matches this README; domain detail lives in `docs/topics/` (resource and extraction model in `docs/topics/resources.md`).
+- **[docs/tech.md](docs/tech.md)** — locked stack decisions D-001..D-008, D-012..D-021 with detail in `docs/tech/`.
 - **[AGENTS.md](AGENTS.md)** — entry point for AI agents working on this repository.
 
-This README is the standing overview; docs/specs.md is where implementation-level detail lives.
+This README is the standing overview; `docs/specs.md` is the spine and `docs/topics/` holds implementation-level detail.

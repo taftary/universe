@@ -27,9 +27,9 @@ All crates share `[workspace.dependencies]` and `[workspace.lints]`. Full lint b
 
 Violation handling: techlead review blocks merge when a boundary is crossed.
 
-## Module map vs specs.md section 3
+## Module map vs scale.md
 
-Maps [specs.md](../specs.md) section 3 levels 3-8 to owners. Levels 1-2 are a static backdrop asset, not simulation.
+Maps [scale.md](../topics/scale.md) levels 3-8 to owners. Levels 1-2 are a static backdrop asset, not simulation.
 
 | Specs level | Owner | Notes |
 | --- | --- | --- |
@@ -40,7 +40,7 @@ Maps [specs.md](../specs.md) section 3 levels 3-8 to owners. Levels 1-2 are a st
 | Lv7 Terrain | `engine::sim::surface` + `engine::generation` | Local gravity, surface pressure and temperature; tiles streamed later. |
 | Lv8 Subterranean | Deferred | Trait stub only; no behavior. |
 
-Readouts stay continuous across every handoff in both directions, per [specs.md](../specs.md) section 8.
+Readouts stay continuous across every handoff in both directions, per [mvp.md](../topics/mvp.md).
 
 ## Threading and frame loop
 

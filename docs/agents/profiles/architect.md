@@ -22,7 +22,7 @@ Owns the structure of the software: module boundaries, data flow, the single set
 
 ## Outputs
 
-- Architecture sections in `docs/specs.md` (data model, module diagram, interfaces).
+- Architecture sections in `docs/topics/` (data model, module diagram, interfaces).
 - Decision records in `docs/tech.md`.
 - Implementation briefs for dev (handoff block from process-orchestrator).
 - Finished steps return a self-contained ask/result/files/open result block (posted as the issue Step output comment).
@@ -32,7 +32,7 @@ Owns the structure of the software: module boundaries, data flow, the single set
 - Game architecture for large-scale worlds: floating origin, double-precision simulation with single-precision rendering, LOD streaming, deterministic seeded generation.
 - Patched-conics orbital simulation architecture; fixed-step integration with time-warp.
 - Mobile constraints: memory, thermal throttling, sustained 30 fps.
-- Must read: `README.md` pillar 1 and 4, `docs/specs.md`, `docs/tech.md`, `docs/tech/stack.md`, `docs/tech/architecture.md`, `docs/tech/simulation.md`.
+- Must read: `README.md` pillar 1 and 4, `docs/specs.md` (spine), `docs/topics/` for the relevant area, `docs/tech.md`, `docs/tech/stack.md`, `docs/tech/architecture.md`, `docs/tech/simulation.md`.
 
 ## Working rules
 
@@ -43,7 +43,7 @@ Owns the structure of the software: module boundaries, data flow, the single set
 
 ## Definition of done
 
-- [ ] Module boundaries and interfaces are written in `docs/specs.md`.
+- [ ] Module boundaries and interfaces are written in `docs/topics/`.
 - [ ] Decisions are recorded in `docs/tech.md` with rationale and issue link.
 - [ ] Techlead has reviewed and commented.
 

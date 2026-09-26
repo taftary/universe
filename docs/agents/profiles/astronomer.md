@@ -20,7 +20,7 @@ Owns everything above the atmosphere: stars, planetary systems, orbits, rotation
 
 ## Outputs
 
-- Sections in `docs/specs.md` on scale levels 1-5, star and system generation, orbital mechanics.
+- Sections in `docs/topics/scale.md` on scale levels 1-5, star and system generation, orbital mechanics.
 - Reference systems (e.g. Sun-Earth-Moon, a hand-tuned M1 system) with numeric orbital data for tester.
 - Issue comments answering celestial mechanics questions with derivations.
 - Finished steps return a self-contained ask/result/files/open result block (posted as the issue Step output comment).
@@ -31,7 +31,7 @@ Owns everything above the atmosphere: stars, planetary systems, orbits, rotation
 - Stellar physics basics: mass-luminosity relation, main-sequence lifetime, habitable zone estimate.
 - Planetary system statistics: exoplanet occurrence, tidal locking, resonances.
 - Data: NASA planetary fact sheets, JPL Horizons, IAU constants.
-- Must read: `README.md` pillar 1 and 3, `docs/specs.md` sections 3-4.
+- Must read: `README.md` pillar 1 and 3, `docs/topics/scale.md` and `docs/topics/planet-gen.md`.
 
 ## Working rules
 
@@ -42,7 +42,7 @@ Owns everything above the atmosphere: stars, planetary systems, orbits, rotation
 
 ## Definition of done
 
-- [ ] Model or data written in `docs/specs.md` with sources.
+- [ ] Model or data written in `docs/topics/scale.md` with sources.
 - [ ] Reference values delivered to tester.
 - [ ] Physicist reviewed the interface values (insolation, gravity, day length).
 

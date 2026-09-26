@@ -1,6 +1,6 @@
 # Simulation — frames, precision, units, time-warp, determinism
 
-**Status:** M0 locked. Implements D-006 and the determinism half of [specs.md](../specs.md) section 2.
+**Status:** M0 locked. Implements D-006 and the determinism half of [specs.md](../specs.md#2-global-conventions) section 2.
 
 ## Frames for navigable levels 3-8
 
@@ -15,7 +15,7 @@ Stellar System (Lv3, star-centered inertial, meters f64)
           Subterranean (Lv8, deferred, same frame as Lv7)
 ```
 
-One active center at a time. Handoffs translate state between parent and child frames without rescaling units. Every readout required by [specs.md](../specs.md) section 8 stays continuous in both directions. The orbit to surface handoff is `C0`-exact by construction: the atmosphere tapers to vacuum at 120 km (D-016) so pressure and density meet the vacuum state with no jump; see Reference planet below.
+One active center at a time. Handoffs translate state between parent and child frames without rescaling units. Every readout required by [mvp.md](../topics/mvp.md) stays continuous in both directions. The orbit to surface handoff is `C0`-exact by construction: the atmosphere tapers to vacuum at 120 km (D-016) so pressure and density meet the vacuum state with no jump; see Reference planet below.
 
 ## Floating origin
 
@@ -35,7 +35,7 @@ One active center at a time. Handoffs translate state between parent and child f
 
 ## Reference planet (D-015/D-016)
 
-Hand-tuned Mars-like planet and thin carbon-dioxide atmosphere for the M1 descent path in [specs.md](../specs.md) section 8. Anchors per D-015: `p0 610 Pa`, `T0 210 K`, `R 3389500 m`, `g0 3.71 m/s2`, `M 6.4171e23 kg` (NASA Mars Fact Sheet); analytic hydrostatic profile; Mars Climate Database is a validation envelope only.
+Hand-tuned Mars-like planet and thin carbon-dioxide atmosphere for the M1 descent path in [mvp.md](../topics/mvp.md). Anchors per D-015: `p0 610 Pa`, `T0 210 K`, `R 3389500 m`, `g0 3.71 m/s2`, `M 6.4171e23 kg` (NASA Mars Fact Sheet); analytic hydrostatic profile; Mars Climate Database is a validation envelope only.
 
 - Temperature is two-segment per D-016: `T(z) = T0 + L1 * z` with `L1 = -0.0012 K/m` to 50 km, isothermal 150 K above. Stored as a positive cooling rate `MARS_LAPSE_RATE_K_PER_M = 0.0012 K/m` so `T(z) = T0 - rate * z` below the tropopause.
 - Gravity is altitude-dependent per D-016: `g(z) = g0 * (R / (R + z))^2` via `BodyParams::gravity_at_altitude` (`mu / (R + z)^2`). Pressure integrates `dp/dz = -p * g(z) / (R_specific * T(z))` from the surface in fixed `PRESSURE_INTEGRATION_STEP_M = 100.0 m` slabs with midpoint temperature and gravity; `libm` provides the exponentials so x86_64 and AArch64 agree.
@@ -45,7 +45,7 @@ Hand-tuned Mars-like planet and thin carbon-dioxide atmosphere for the M1 descen
 ## Integrators and scaling
 
 - Coasting orbits propagate analytically (Kepler propagation, on rails under warp per the time-warp rules below). Numerical integration (semi-implicit Euler at MVP, velocity Verlet when the error budget needs it) is only for powered flight and atmospheric descent. Energy drift is tested as an invariant in [quality.md](quality.md). Solver detail lives in Orbits and warp below.
-- Internal non-dimensionalisation is allowed inside a solver for conditioning. SI remains the interface at the gameplay level per [specs.md](../specs.md) section 2.
+- Internal non-dimensionalisation is allowed inside a solver for conditioning. SI remains the interface at the gameplay level per [specs.md](../specs.md#2-global-conventions) section 2.
 - Step sizes are named constants with units, locked in `tech.md` (D-012). No frame-rate-dependent `dt`.
 
 ## Orbits and warp (D-017/D-018)
@@ -64,7 +64,7 @@ Implements D-017 and D-018 from [../tech.md](../tech.md). Math lives in `engine:
 
 ## Time-warp state machine
 
-Mirrors [specs.md](../specs.md) section 2 rules exactly:
+Mirrors [specs.md](../specs.md#2-global-conventions) section 2 rules exactly:
 
 ```text
 1x [on foot or EVA, always allowed]
@@ -73,7 +73,7 @@ Mirrors [specs.md](../specs.md) section 2 rules exactly:
 
 - Warp drops to 1x automatically on atmospheric entry, on approach to any body or object, and whenever any physiological alarm is raised.
 - Under warp, orbits propagate analytically (on rails). Consumables and physiology integrate at coarse steps sized to the warp factor.
-- Maximum warp constant: `MAX_WARP_FACTOR = 10000.0 dimensionless`, source: [specs.md](../specs.md) section 2. Minimum tick: `SIM_TICK_S = 0.05 s` (D-012), never derived from frame time.
+- Maximum warp constant: `MAX_WARP_FACTOR = 10000.0 dimensionless`, source: [specs.md](../specs.md#2-global-conventions) section 2. Minimum tick: `SIM_TICK_S = 0.05 s` (D-012), never derived from frame time.
 
 ## Seeds and procedural content
 

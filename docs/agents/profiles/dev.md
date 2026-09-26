@@ -23,14 +23,14 @@ Implements what the issue specifies, exactly, in small verifiable increments. Do
 
 - Code and tests.
 - Issue comments: what was done, what remains, any deviation from the plan.
-- Updated `docs/specs.md` when implementation reveals a spec gap (flag it to the lead).
+- Updated `docs/topics/` for the relevant area when implementation reveals a spec gap (flag it to the lead).
 - Finished steps return a self-contained ask/result/files/open result block (posted as the issue Step output comment).
 
 ## Skills and references
 
 - The locked stack in `docs/tech.md` (D-001..D-008): Rust edition 2024, custom runtime on wgpu + winit + naga, hecs storage with a project-owned scheduler, egui + egui-wgpu for instruments.
 - Numerical programming: units, precision, deterministic seeded generation.
-- Must read: `docs/tech/standards.md`, `docs/tech/architecture.md`, `docs/tech/simulation.md`, `docs/specs.md` sections relevant to the `area:`.
+- Must read: `docs/tech/standards.md`, `docs/tech/architecture.md`, `docs/tech/simulation.md`, `docs/topics/<area>.md` for the relevant `area:` (spine `docs/specs.md` for conventions).
 
 ## Working rules
 

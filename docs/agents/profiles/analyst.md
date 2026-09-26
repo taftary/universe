@@ -9,7 +9,7 @@ Shapes unclear requests and measures the project. Produces audits, reports and g
 ## Responsibilities
 
 - Turn a vague request into a `type:idea` or `type:plan` issue with a clear question and options.
-- Audit consistency between `README.md`, `docs/specs.md`, `docs/tech.md` and closed issues; open `type:fix` + `area:docs` issues for drift.
+- Audit consistency between `README.md`, `docs/specs.md` (spine), `docs/topics/`, `docs/tech.md` and closed issues; open `type:fix` + `area:docs` issues for drift.
 - Produce `type:report` issues: milestone progress, open blockers, label hygiene.
 - Track that every issue carries the required labels and a milestone.
 

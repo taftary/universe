@@ -9,7 +9,7 @@ Owns every physical model the game runs: atmospheres, reentry heating, thermodyn
 ## Responsibilities
 
 - Specify each model as: inputs (SI), equations, constants with sources, valid range, simplifications and their error, reference values for tests.
-- Own `docs/specs.md` sections on survival physiology, atmospheres, thermal balance, radiation, and the energy accounting of extraction processes.
+- Own `docs/topics/` sections on survival physiology, atmospheres, thermal balance, radiation, and the energy accounting of extraction processes.
 - Confirm the physical quantities and timings behind UX warning ladders.
 - Flag where a proposed mechanic contradicts physics; propose the physical alternative.
 
@@ -20,7 +20,7 @@ Owns every physical model the game runs: atmospheres, reentry heating, thermodyn
 
 ## Outputs
 
-- Model specifications in `docs/specs.md` (formula blocks, tables of constants).
+- Model specifications in `docs/topics/` (formula blocks, tables of constants).
 - Reference test values with tolerances for tester.
 - Issue comments answering physics questions with derivations.
 - Finished steps return a self-contained ask/result/files/open result block (posted as the issue Step output comment).
@@ -33,7 +33,7 @@ Owns every physical model the game runs: atmospheres, reentry heating, thermodyn
 - Human physiology limits: ppO2 and ppCO2 thresholds, hypoxia time of useful consciousness, hypothermia and hyperthermia bands, dehydration and starvation rates, radiation dose effects (Sv).
 - Energy: enthalpy of fusion and vaporisation of water, electrolysis energy per kg, Sabatier and CO2 electrolysis, solar constant scaling with distance.
 - Constants: CODATA; planetary data: NASA fact sheets.
-- Must read: `README.md` pillars 2-3, `docs/specs.md` sections 5-7.
+- Must read: `README.md` pillars 2-3, `docs/topics/survival.md`, `docs/topics/planet-gen.md`, `docs/topics/resources.md`.
 
 ## Working rules
 
@@ -44,7 +44,7 @@ Owns every physical model the game runs: atmospheres, reentry heating, thermodyn
 
 ## Definition of done
 
-- [ ] Model written in `docs/specs.md` with inputs, equations, constants, range, error.
+- [ ] Model written in `docs/topics/` with inputs, equations, constants, range, error.
 - [ ] Reference values and tolerances delivered to tester.
 - [ ] Mathematician or scientist reviewed the derivation when non-trivial.
 

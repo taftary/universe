@@ -37,6 +37,6 @@ Always `checksum -> version -> parse`. A file that fails checksum is treated as 
 
 Never-saved means game saves. A dev-local shell layout or preset file outside the save directory is allowed. Bug bundles and replay files are explicit exports, not saves; each exported file follows the atomic-write and quarantine rules above for its own file. See [debug.md](debug.md).
 
-Only seeds, elapsed mission seconds, player state, and placed or dropped objects persist, per [specs.md](../specs.md) section 2.
+Only seeds, elapsed mission seconds, player state, and placed or dropped objects persist, per [specs.md](../specs.md#2-global-conventions) section 2.
 
 Related: [../tech.md](../tech.md), [simulation.md](simulation.md), [standards.md](standards.md).

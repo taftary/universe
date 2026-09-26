@@ -8,7 +8,7 @@ Sustained load on the reference device. Peak values never substitute for sustain
 
 | Metric | Floor / ceiling | Notes |
 | --- | --- | --- |
-| Frame rate | 30 fps sustained floor | Full descent and ascent at any warp factor, per [specs.md](../specs.md) section 8. |
+| Frame rate | 30 fps sustained floor | Full descent and ascent at any warp factor, per [mvp.md](../topics/mvp.md). |
 | Hitch | p95 hitch below 100 ms on the surface | Named: `SURFACE_HITCH_P95_MS = 100.0 ms`; generation hitches use worker threads. |
 | Sim tick | Average below 8 ms, p99 below 16 ms | Named: `SIM_TICK_AVG_MS = 8.0 ms`, `SIM_TICK_P99_MS = 16.0 ms`; headless-testable. |
 | Memory | Below 1 GB resident | Named: `MEMORY_CEILING_MB = 1024.0 MB`; render caches excluded from sim accounting. |
