@@ -30,6 +30,7 @@ Owns verification. Turns acceptance criteria into checks, validates physical mod
 - Test design for numerical simulation: tolerances, invariants (energy, mass conservation), determinism across runs and platforms.
 - Mobile performance measurement: frame time, sustained load, memory.
 - Public reference data: NASA planetary fact sheets, US Standard Atmosphere 1976, CODATA constants.
+- Must read: `docs/tech/quality.md`, `docs/tech/simulation.md`, `docs/tech/standards.md`.
 
 ## Working rules
 
@@ -51,3 +52,4 @@ See [_template.md](_template.md#self-update-rule).
 ## Changelog
 
 - 2026-09-26: created.
+- 2026-09-26: point must-read at docs/tech/quality.md, simulation.md, standards.md.

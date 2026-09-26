@@ -29,7 +29,7 @@ Implements what the issue specifies, exactly, in small verifiable increments. Do
 
 - The language and engine chosen in `docs/tech.md` (none yet).
 - Numerical programming: units, precision, deterministic seeded generation.
-- Must read: `docs/tech.md` standards, `docs/specs.md` sections relevant to the `area:`.
+- Must read: `docs/tech/standards.md`, `docs/tech/architecture.md`, `docs/tech/simulation.md`, `docs/specs.md` sections relevant to the `area:`.
 
 ## Working rules
 
@@ -51,3 +51,4 @@ See [_template.md](_template.md#self-update-rule).
 ## Changelog
 
 - 2026-09-26: created.
+- 2026-09-26: point must-read at docs/tech/standards.md, architecture.md, simulation.md.

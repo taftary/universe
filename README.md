@@ -118,7 +118,7 @@ These remain part of the intended game but are explicitly deferred. Each depends
 - **Planet generation:** Pipeline defined at the outline level (Pillar 3). Not implemented.
 - **Resources and extraction:** Defined in specs.md Section 7 — ten tracked substances, eight processes with energy costs, availability by archetype, two deliberate realism concessions. Not implemented.
 - **Machines:** Requirements defined (Pillar 4). Not designed in detail.
-- **Tech stack:** Deliberately undecided. The README commits to a performance budget, not an engine. A separate `tech.md` will hold that decision.
+- **Tech stack:** Decided in M0. See `docs/tech.md` and `docs/tech/` (`stack.md`, `architecture.md`, `simulation.md`, `persistence.md`, `standards.md`, `quality.md`, `mobile.md`, `references.md`). The README commits to a performance budget, not an engine; the budget lives in `docs/tech/quality.md`.
 - **Not started:** Everything below the design level.
 
 ## Roadmap Shape (High Level, Not Yet Scheduled)
@@ -138,7 +138,7 @@ Each stage adds one major unproven system at a time, so failures are easy to iso
 
 - **[docs/README.md](docs/README.md)** — index of all project documentation.
 - **[docs/specs.md](docs/specs.md)** — detailed spec (Draft v0.3). Matches this README; Section 7 holds the resource and extraction model.
-- **[docs/tech.md](docs/tech.md)** — engine and tooling decision, driven by the mobile performance budget above.
+- **[docs/tech.md](docs/tech.md)** — locked stack decisions D-001..D-008 with detail in `docs/tech/`.
 - **[AGENTS.md](AGENTS.md)** — entry point for AI agents working on this repository.
 
 This README is the standing overview; docs/specs.md is where implementation-level detail lives.

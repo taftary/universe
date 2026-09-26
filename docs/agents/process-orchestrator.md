@@ -19,6 +19,7 @@ Pick the **lead** profile from the topic; add **support** profiles as listed. Wh
 | numerical methods, integrators, precision, floating origin | [mathematician](profiles/mathematician.md) | physicist, architect |
 | chemistry, geology, biology, ISRU processes | [scientist](profiles/scientist.md) | physicist |
 | system design, module boundaries, data flow, tech decisions | [architect](profiles/architect.md) | techlead |
+| tech stack docs, coding standards, stack decisions | [architect](profiles/architect.md) | techlead |
 | code standards, tooling, performance budget, review | [techlead](profiles/techlead.md) | architect, dev |
 | implementation of a specified change | [dev](profiles/dev.md) | techlead, tester |
 | tests, verification, acceptance criteria, reference values | [tester](profiles/tester.md) | physicist, dev |
@@ -57,6 +58,8 @@ inputs: <files, numbers, constraints>
 done when: <acceptance criterion>
 ```
 
+Handoff note: implementation briefs cite `docs/tech/standards.md` for layout, lints, and performance rules.
+
 ## Blocked
 
 If a profile cannot proceed (missing decision, missing data, conflicting docs): set `status:blocked`, comment the blocker on the issue, and return to the orchestrator with the question for the user.
@@ -68,3 +71,4 @@ If a request keeps landing on the wrong profile, or a needed profile does not ex
 ## Changelog
 
 - 2026-09-26: created.
+- 2026-09-26: add tech-stack routing row and standards.md handoff note.

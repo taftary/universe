@@ -8,6 +8,7 @@ This folder holds the **reference documents** those issues point to.
 | [../README.md](../README.md) | Standing project overview, pillars, roadmap shape | Vision or roadmap changes |
 | [specs.md](specs.md) | Implementation-level design spec | A `type:feature` / `type:change` issue is closed |
 | [tech.md](tech.md) | Tech stack decision record and performance budget | A tech decision is taken |
+| [tech/](tech.md#folder-index-of-docstech) | Stack, architecture, simulation, persistence, standards, quality, mobile, references | A `type:feature` / `type:change` with `area:docs` touches the stack |
 | [topics/](topics/README.md) | One file per domain topic (scale, survival, planet-gen, ...) | A topic gains a dedicated doc |
 | [milestones/](milestones/README.md) | One file per milestone, mirrors GitHub milestones | A milestone is opened or released |
 | [agents/](agents/README.md) | Agent system: orchestrators and profiles | An agent self-updates or a new profile is added |
@@ -15,7 +16,7 @@ This folder holds the **reference documents** those issues point to.
 ## Issue to document mapping
 
 - Every issue carries one `area:*` label. The area tells which document(s) must be updated before the issue is closed:
-  - `area:docs` -> this folder or `README.md`
+  - `area:docs` -> this folder or `README.md`; tech decisions also update `tech.md` and the matching file under `tech/` (stack, architecture, simulation, persistence, standards, quality, mobile, references)
   - `area:process` -> `agents/`
   - `area:scale`, `area:survival`, `area:planet-gen`, `area:machines`, `area:resources` -> `specs.md` and, when it exists, `topics/<area>.md`
 - Every issue belongs to one milestone `M0..M8`; the matching `milestones/Mx-*.md` (when created) lists the issues it contains.

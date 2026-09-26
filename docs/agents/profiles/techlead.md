@@ -30,7 +30,7 @@ Owns code quality, tooling and the performance budget. Turns architecture into c
 
 - Code review, profiling on mobile, CI basics, dependency hygiene.
 - Numerical code review: units, precision, determinism.
-- Must read: `docs/tech.md`, `docs/agents/gh-orchestrator.md` (branch, commit, release recipes).
+- Must read: `docs/tech.md`, `docs/tech/standards.md`, `docs/tech/quality.md`, `docs/tech/mobile.md`, `docs/agents/gh-orchestrator.md` (branch, commit, release recipes).
 
 ## Working rules
 
@@ -52,3 +52,4 @@ See [_template.md](_template.md#self-update-rule).
 ## Changelog
 
 - 2026-09-26: created.
+- 2026-09-26: point must-read at docs/tech/standards.md, quality.md, mobile.md.

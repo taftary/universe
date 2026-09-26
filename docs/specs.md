@@ -28,7 +28,7 @@ These apply to every system in every section below.
 
 **Determinism.** Every world derives entirely from a seed. The same seed produces the same world on every device, every time. Nothing in generation depends on frame rate, device, or wall-clock time.
 
-**Performance budget.** Reference target is a mid-range phone. Frame time must never exceed the 30 fps floor during sustained play, including under thermal throttling. Memory ceiling and reference device definition are to be fixed in tech.md.
+**Performance budget.** Reference target is a mid-range phone. Frame time must never exceed the 30 fps floor during sustained play, including under thermal throttling. Fixed in [tech.md](tech.md) and [tech/quality.md](tech/quality.md); mobile behavior in [tech/mobile.md](tech/mobile.md).
 
 **Presentation.** Nothing is drawn that the simulation did not produce. Visual fidelity is added only where it helps the player read the simulation.
 
@@ -287,7 +287,7 @@ Ordered as in the README roadmap. Each depends on the one before it.
 - Whether physiology can integrate safely at 10,000x or whether physiological state forces a lower warp cap.
 - Whether light-time delay at Lv3 matters enough to model for observation and communication.
 - How orbital maneuver planning is exposed on a touch screen without hiding the physics.
-- Reference device definition, memory ceiling, and integration step sizes — to be fixed in tech.md.
+- Reference device definition, memory ceiling, and integration step sizes — fixed in [tech.md](tech.md), [tech/quality.md](tech/quality.md), and [tech/simulation.md](tech/simulation.md).
 - Which planet archetypes follow Mars-like as hand-tuned test worlds before generation exists.
 - Whether a process-and-wait resource loop (Section 7.5) holds attention on its own, or needs an intrinsic skill layer the way orbital mechanics provides one for transit.
 - Starting stores: how many person-days of food and LiOH the lander carries, and therefore the length of the stage-2 clock.

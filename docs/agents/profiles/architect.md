@@ -31,7 +31,7 @@ Owns the structure of the software: module boundaries, data flow, the single set
 - Game architecture for large-scale worlds: floating origin, double-precision simulation with single-precision rendering, LOD streaming, deterministic seeded generation.
 - Patched-conics orbital simulation architecture; fixed-step integration with time-warp.
 - Mobile constraints: memory, thermal throttling, sustained 30 fps.
-- Must read: `README.md` pillar 1 and 4, `docs/specs.md`, `docs/tech.md`.
+- Must read: `README.md` pillar 1 and 4, `docs/specs.md`, `docs/tech.md`, `docs/tech/stack.md`, `docs/tech/architecture.md`, `docs/tech/simulation.md`.
 
 ## Working rules
 
@@ -53,3 +53,4 @@ See [_template.md](_template.md#self-update-rule).
 ## Changelog
 
 - 2026-09-26: created.
+- 2026-09-26: point must-read at docs/tech/stack.md, architecture.md, simulation.md.
