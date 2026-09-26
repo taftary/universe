@@ -136,7 +136,9 @@ Each stage adds one major unproven system at a time, so failures are easy to iso
 
 ## Companion Documents
 
-- **specs.md** — detailed spec (Draft v0.3). Matches this README; Section 7 holds the resource and extraction model.
-- **tech.md** (planned) — engine and tooling decision, driven by the mobile performance budget above.
+- **[docs/README.md](docs/README.md)** — index of all project documentation.
+- **[docs/specs.md](docs/specs.md)** — detailed spec (Draft v0.3). Matches this README; Section 7 holds the resource and extraction model.
+- **[docs/tech.md](docs/tech.md)** — engine and tooling decision, driven by the mobile performance budget above.
+- **[AGENTS.md](AGENTS.md)** — entry point for AI agents working on this repository.
 
-This README is the standing overview; specs.md is where implementation-level detail lives.
+This README is the standing overview; docs/specs.md is where implementation-level detail lives.

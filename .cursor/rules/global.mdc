@@ -1,0 +1,6 @@
+---
+description: Global entry point for all agents
+alwaysApply: true
+---
+
+Read and follow `AGENTS.md` at the repository root. It is the single entry point for this repository.
