@@ -27,7 +27,7 @@ Implements what the issue specifies, exactly, in small verifiable increments. Do
 
 ## Skills and references
 
-- The language and engine chosen in `docs/tech.md` (none yet).
+- The locked stack in `docs/tech.md` (D-001..D-008): Rust edition 2024, custom runtime on wgpu + winit + naga, hecs storage with a project-owned scheduler, egui + egui-wgpu for instruments.
 - Numerical programming: units, precision, deterministic seeded generation.
 - Must read: `docs/tech/standards.md`, `docs/tech/architecture.md`, `docs/tech/simulation.md`, `docs/specs.md` sections relevant to the `area:`.
 

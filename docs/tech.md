@@ -15,7 +15,7 @@ From [../README.md](../README.md) and [specs.md](specs.md) section 2. These are 
 
 ## Decisions
 
-Locked by the user. Wording below is verbatim (D-001..D-008). Each links to its tracking issue.
+Decisions D-001..D-008 were confirmed on 2026-09-26. Wording below is verbatim. Each links to its tracking issue.
 
 | ID | Decision (verbatim) | Issue | Rationale |
 | --- | --- | --- | --- |

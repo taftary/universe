@@ -4,20 +4,26 @@
 
 ## Accepted
 
-- The Rust Book, chapter 20 (final project and patterns). Baseline for workspace organization and testing habits.
-- The Rustonomicon. Unsafe and layout rules behind [standards.md](standards.md).
-- The Rust Performance Book. Allocation, layout, and profiling guidance.
-- Canonical Rust best practices (official organization guides). Naming and module structure.
-- Microsoft Rust guidelines. Error handling and API design input for D-007.
-- Corgea 2026 Rust analysis. Dependency and unsafe-trend context.
-- Bielefeld University Rust slides. Teaching reference for ownership and concurrency basics.
-- dasifefe Rust resource list. Index used to cross-check the sources above.
-- bevy.org documentation. Compared for the Bevy 0.19 evaluation in [stack.md](stack.md).
-- Bevy GitHub issues #20998, #23754, #19358. Mobile support, f32 Transform limits, and release-cadence evidence cited in [stack.md](stack.md).
-- Rustunit mobile framerate study. Sustained-rate evidence for the 30 fps floor in [quality.md](quality.md).
-- Arm ASTC guide. Texture format choice in [mobile.md](mobile.md).
-- Android texture compression documentation. ETC2 default rationale in [mobile.md](mobile.md).
-- kvark wgpu notes (gfx-rs author). Backend behavior and GLES fallback context for D-003.
+- The Rust Book, chapter 20 "Advanced Features" (https://doc.rust-lang.org/book/ch20-00-advanced-features.html). Unsafe, advanced traits/types/functions/closures, and macros. Underpins the unit-newtype rule in [simulation.md](simulation.md) and the SAFETY-comment rule in [standards.md](standards.md).
+- The Little Book of Rust Macros (https://danielkeep.github.io/tlborm/book/). Macro-authoring reference for the `impl_units!` boilerplate rule in [simulation.md](simulation.md).
+- The Rustonomicon (https://doc.rust-lang.org/nomicon/). Unsafe and layout rules behind [standards.md](standards.md).
+- The Rust Performance Book (https://nnethercote.github.io/perf-book/). Allocation, layout, and profiling guidance.
+- Rust API Guidelines (https://rust-lang.github.io/api-guidelines/). Naming and module structure.
+- Microsoft Rust guidelines (https://github.com/microsoft/rust-guidelines). Error handling and API design input for D-007.
+- Corgea "Rust Best Practices 2026: Security, Idioms and Error Handling" (https://corgea.com/learn/rust-security-best-practices). Best-practices article: lints declared in `Cargo.toml`, `cargo audit` / `cargo deny` policy, unwrap policy. Context for [standards.md](standards.md) and [quality.md](quality.md).
+- Bielefeld University Rust slides. Teaching reference for ownership and concurrency basics. No stable public URL found; retained pending a durable link (propose one via a tech issue).
+- dasifefe Rust game-development frameworks list (https://github.com/dasifefe/rust-game-development-frameworks). Index used to cross-check the sources above.
+- bevy.org documentation (https://bevy.org/learn/). Compared for the Bevy 0.19 evaluation in [stack.md](stack.md); source of the f32 `Transform` limit and the roughly 3-month release cadence cited there.
+- Bevy GitHub issues #20998 (https://github.com/bevyengine/bevy/issues/20998, mobile support under-staffed), #23754 (https://github.com/bevyengine/bevy/issues/23754, Pixel 10 PowerVR-class GPU-driven-culling crash), #19358 (https://github.com/bevyengine/bevy/issues/19358, iOS 60 fps cap). Mobile-risk evidence cited in [stack.md](stack.md) and [mobile.md](mobile.md).
+- Bevy PRs #23708 (https://github.com/bevyengine/bevy/pull/23708) and #23491 (https://github.com/bevyengine/bevy/pull/23491). Android activity feature work behind the `minSdk = 26` floor in [mobile.md](mobile.md).
+- bevy_framepace (https://github.com/aevyrie/bevy_framepace). Frame pacing and frame limiting reference for the frame pacer in [mobile.md](mobile.md).
+- bevy_ios_toolkit (https://docs.rs/bevy_ios_toolkit). Thermal state (`ProcessInfo.ThermalState`) plus Low Power Mode as a polled resource; reference for the Serious-tier downgrade pattern in [mobile.md](mobile.md).
+- Rustunit "Bevy Efficiency on Mobile" (https://rustunit.com/blog/2025/01-02-bevy-mobile-framerate/). Default engine settings run an unbounded update loop (observed at unbounded fps with 200% CPU); evidence for the "never run an unbounded update loop" rule in [mobile.md](mobile.md).
+- Android `PowerManager` thermal API docs (https://developer.android.com/reference/android/os/PowerManager#getCurrentThermalStatus()). `getCurrentThermalStatus` / `OnThermalStatusChangedListener` behind the Android thermal poll in [mobile.md](mobile.md).
+- Apple `ProcessInfo` thermal state docs (https://developer.apple.com/documentation/foundation/processinfo/thermalstate). iOS thermal levels behind the tier downgrade in [mobile.md](mobile.md).
+- Arm ASTC guide (https://developer.arm.com/documentation/102162/latest/). Texture format choice in [mobile.md](mobile.md).
+- Android texture compression docs (https://developer.android.com/games/optimize/textures). ETC2 default rationale in [mobile.md](mobile.md).
+- kvark wgpu notes (https://hackmd.io/@kvark/rust-gfx). Backend behavior and GLES fallback context for D-003.
 
 ## Rejected (one-line reason each)
 

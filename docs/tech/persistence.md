@@ -35,6 +35,6 @@ Always `checksum -> version -> parse`. A file that fails checksum is treated as 
 - Transient profiling spans and frame-time history.
 - Debug shell state.
 
-Only seeds, elapsed mission seconds, player state, and placed or dropped objects persist, per [specs.md](../specs.md) section 4.
+Only seeds, elapsed mission seconds, player state, and placed or dropped objects persist, per [specs.md](../specs.md) section 2.
 
 Related: [../tech.md](../tech.md), [simulation.md](simulation.md), [standards.md](standards.md).

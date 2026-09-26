@@ -33,7 +33,7 @@ Run in this order. Any failure blocks merge.
 
 ```text
 cargo fmt --check
-cargo clippy --all-targets --all-features -D warnings
+cargo clippy --all-targets --all-features -- -D warnings
 cargo build
 cargo test (includes doc tests)
 headless sim smoke (tests/ headless descent profile)
@@ -56,7 +56,7 @@ MSRV job (rust-version floor; verifies the max-MSRV rule in stack.md)
 - Reference values with tolerances. Example: Earth sea-level `SEA_LEVEL_PRESSURE_PA = 101325.0 Pa` within `PRESSURE_TOLERANCE_PA = 1.0 Pa`, `SEA_LEVEL_TEMPERATURE_K = 288.15 K` within `TEMPERATURE_TOLERANCE_K = 0.01 K`. Source: US Standard Atmosphere 1976.
 - Invariants: energy and mass conservation within documented drift per integrator; no silent clamping.
 - Determinism: same seed and inputs yield the same state hash across runs and across x86_64 and AArch64; see [simulation.md](simulation.md).
-- Property tests: round-trip saves, monotonic pressure versus decreasing altitude, warp up and down without state corruption.
+- Property tests (`proptest`): round-trip saves, monotonic pressure versus decreasing altitude, warp up and down without state corruption.
 - Every physical model has at least one test against an independent reference value. Exact numbers are reported, never visual judgment.
 
 Related: [../tech.md](../tech.md), [standards.md](standards.md), [simulation.md](simulation.md), [mobile.md](mobile.md).

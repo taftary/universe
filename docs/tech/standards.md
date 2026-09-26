@@ -22,7 +22,7 @@ Every crate inherits workspace dependencies and lints:
 workspace = true
 ```
 
-`engine` is the sole exception for `rust.unsafe_code` (see Unsafe below). All other crates keep the workspace value.
+Every non-engine crate (`game`, `debug`, `tools`, tests) adds `#![forbid(unsafe_code)]` at its crate root. `engine` keeps the workspace `deny` value below and justifies each use with a per-item `#[expect(unsafe_code, reason = "...")]` (see Unsafe below).
 
 ## Naming and API design
 
@@ -47,7 +47,8 @@ pub const SEA_LEVEL_PRESSURE_PA: f64 = 101325.0;
 ## Unsafe discipline
 
 - `unsafe` is allowed only in `engine`, only with a `// SAFETY:` comment stating the invariant, and only after techlead review.
-- Every other crate carries the workspace `forbid(unsafe_code)` value below. Any `unsafe` outside `engine` fails CI.
+- Every non-engine crate (`game`, `debug`, `tools`, tests) adds `#![forbid(unsafe_code)]` at its crate root. `engine` keeps the workspace `deny` and uses per-item `#[expect(unsafe_code, reason = "...")]` where justified.
+- CI enforces the boundary with `undocumented_unsafe_blocks = "deny"` plus a grep gate for `unsafe` outside `crates/engine`. Any `unsafe` outside `engine` fails CI.
 - `undocumented_unsafe_blocks` is denied everywhere, including `engine`.
 
 ## Lints (verbatim)
@@ -56,20 +57,25 @@ Copy this block into the workspace `Cargo.toml`. It is the single source of trut
 
 ```toml
 [workspace.lints.rust]
-unsafe_code = "forbid"
+unsafe_code = "deny"
+unsafe_op_in_unsafe_fn = "deny"
 missing_docs = "warn"
+missing_debug_implementations = "warn"
 
 [workspace.lints.clippy]
-pedantic = "warn"
-perf = "warn"
-correctness = "deny"
+pedantic = { level = "warn", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
+style = { level = "warn", priority = -1 }
+complexity = { level = "warn", priority = -1 }
+perf = { level = "warn", priority = -1 }
+correctness = { level = "deny", priority = -1 }
 unwrap_used = "deny"
 expect_used = "deny"
 undocumented_unsafe_blocks = "deny"
 cast_possible_truncation = "warn"
 ```
 
-Notes: `engine` opts out of `rust.unsafe_code` inheritance and re-declares it as `allow` with the SAFETY rule above. All clippy groups above still apply to `engine`.
+Notes: `engine` keeps the workspace `deny` for `rust.unsafe_code`; justified uses carry a per-item `#[expect(unsafe_code, reason = "...")]` with the SAFETY rule above. Non-engine crates additionally declare `#![forbid(unsafe_code)]` at the crate root. `pedantic` stays `warn`: under CI's `-D warnings` that is blocking, which is intentional for a solo project (lint noise is fixed, not tolerated). Group entries use the `{ level, priority }` form so Cargo emits no lint-priority warnings on every build. Override a lint with `#[expect(lint, reason = "...")]`, never `#[allow]`. All clippy groups above still apply to `engine`.
 
 ## Doc rules
 
@@ -95,6 +101,7 @@ overflow-checks = true
 ```
 
 - Global allocator is `mimalloc` in binaries. No per-crate allocator choice.
+- Fast hashers only for trusted internal keys: `foldhash` for in-memory maps with non-adversarial keys. Any map keyed by external input (save content, player text, network data) uses the default `SipHash` hasher.
 - Hot loops use struct-of-arrays layout and avoid pointer chasing.
 - Zero steady-state allocation: no allocation in the sim tick or frame loop after warmup. Allocation is allowed during load and generation only.
 - Every performance-sensitive change states its measured or estimated cost in the issue.

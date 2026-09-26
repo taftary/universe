@@ -20,8 +20,8 @@ One active center at a time. Handoffs translate state between parent and child f
 ## Floating origin
 
 - Sim holds world positions and velocities in f64 (`glam::DVec3`, `glam::DQuat`).
-- A single camera-relative conversion point turns f64 sim coordinates into f32 render coordinates. Only `engine::render` calls it.
-- Origin rebase threshold is named: `ORIGIN_REBASE_DISTANCE_M = 50000.0 meters`, chosen so f32 mantissa error stays below visual tolerance at terrain scale. Source: project error budget (first scaffold measures it).
+- A single camera-relative conversion point turns f64 sim coordinates into f32 render coordinates. Only `engine::render` calls it. Render-side structs that cross the boundary are plain data (`bytemuck` `Pod`) so the conversion stays a memcopy-safe cast.
+- Origin rebase threshold is named: `ORIGIN_REBASE_DISTANCE_M = 5000.0 meters`, chosen so f32 mantissa error stays below visual tolerance at terrain scale (f32 ULP at 5 km is about 0.5 mm). Source: project error budget (first scaffold measures it).
 - No other module converts precision. Passing f32 into sim is a bug.
 
 ## Unit newtypes
@@ -34,7 +34,7 @@ One active center at a time. Handoffs translate state between parent and child f
 
 ## Integrators and scaling
 
-- Symplectic integrators for orbits (semi-implicit Euler at MVP, velocity Verlet when the error budget needs it). Energy drift is tested as an invariant in [quality.md](quality.md).
+- Coasting orbits propagate analytically (Kepler propagation, on rails under warp per the time-warp rules below). Numerical integration (semi-implicit Euler at MVP, velocity Verlet when the error budget needs it) is only for powered flight and atmospheric descent. Energy drift is tested as an invariant in [quality.md](quality.md).
 - Internal non-dimensionalisation is allowed inside a solver for conditioning. SI remains the interface at the gameplay level per [specs.md](../specs.md) section 2.
 - Step sizes are named constants with units, fixed in `tech.md` at scaffold. No frame-rate-dependent `dt`.
 

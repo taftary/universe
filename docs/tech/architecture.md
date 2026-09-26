@@ -20,7 +20,7 @@ All crates share `[workspace.dependencies]` and `[workspace.lints]`. Full lint b
 - `engine::sim` is headless-testable. It depends only on `glam`, unit types, and the project PRNG. No `winit`, no `wgpu`, no `egui`, no file IO.
 - `engine::gen` is pure and deterministic. Same seed yields same inputs to sim. No wall clock, no thread-dependent order. Procedural content is never saved; see [simulation.md](simulation.md) and [persistence.md](persistence.md).
 - `game` has no GPU code. It wires sim, gen, and instruments. Any draw call outside `engine::render` or `debug` is a bug.
-- `debug` never leaks into release. It is gated behind a `debug` feature and excluded from release builds. Instruments shown to players live in `game` via `egui`; the debug shell lives in `debug`.
+- `debug` never leaks into release. It is a non-default workspace member (binary); it is not built unless requested and is excluded from release builds. Instruments shown to players live in `game` via `egui`; the debug shell lives in `debug`.
 - Platform code sits behind traits in `engine`. Callers use `PlatformClock`, `PlatformFs`, `PlatformThermal` traits. Concrete implementations are injected; tests inject fakes.
 - `tools` may use a `test-internals` style feature to reach `engine` internals. That feature is never enabled in `game` or `debug` release builds.
 
@@ -43,7 +43,7 @@ Readouts stay continuous across every handoff in both directions, per [specs.md]
 
 ## Threading and frame loop
 
-- Pattern is `std::thread` plus `mpsc` workers. One render thread owns `wgpu`; one sim thread owns the fixed-step scheduler; one worker pool handles generation chunks.
+- Pattern is `std::thread` plus `mpsc` workers. The main thread owns `winit` and the `wgpu` surface (on iOS/Android the event loop plus surface creation must live on the main thread); one render thread owns `wgpu` device work; one sim thread owns the fixed-step scheduler; one worker pool handles generation chunks.
 - No async runtime in the frame loop. No `tokio`, no `async-std` on the hot path. Offline `tools` may use blocking IO only.
 - Fixed-step sim tick with accumulator; render interpolates. The 30 fps floor and tick budget are defined in [quality.md](quality.md).
 - Frame pacer and thermal downgrade live in [mobile.md](mobile.md).

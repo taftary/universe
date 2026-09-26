@@ -17,7 +17,7 @@ No API below these floors is used without a runtime probe and a fallback path.
 
 ## Thermal management
 
-- iOS polls `ProcessInfo.thermalState`. Android polls the thermal status API. Poll interval is `THERMAL_POLL_S = 2.0 s`, source: project choice recorded here.
+- iOS polls `ProcessInfo.thermalState`. Android polls `PowerManager.getCurrentThermalStatus` (with `OnThermalStatusChangedListener` where event-driven updates beat polling). Poll interval is `THERMAL_POLL_S = 2.0 s`, source: project choice recorded here.
 - Tier downgrade engages before hardware throttling: High to Medium, then Medium to Low. Downgrade reduces rendering scale and texture density; sim behavior is unchanged.
 - Follow the Apple Serious-tier pattern: at Serious level, drop to the Low tier immediately and notify the player with an instrument-grade message, not a blocking dialog.
 - A 15-minute sustained session must hold the floor without a throttle-induced drop; see [quality.md](quality.md).

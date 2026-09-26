@@ -2,7 +2,7 @@
 
 **Status:** Proposed locks verified 2026-09-26 via crates.io API (`max_stable_version`). Locked for v1 unless a decision row overturns them.
 **Lock rule:** Exact version pinned in `Cargo.lock`; `Cargo.toml` uses caret within the locked major line. A bump across majors needs a new D-row in [../tech.md](../tech.md).
-**MSRV rule:** Floor equals the maximum MSRV of the locked dependencies, at least 1.87. No fabricated MSRV number is recorded here; the scaffold sets `rust-version` from `cargo tree` output.
+**MSRV rule:** Floor equals the maximum MSRV of the locked dependencies, at least 1.87. No fabricated MSRV number is recorded here; the scaffold sets `rust-version` from `cargo tree` output. Consequence: `egui` / `egui-wgpu` 0.36.2 declare `rust-version 1.95` (verified 2026-09-26 via crates.io API), so the max-MSRV rule currently floors the workspace at 1.95, not 1.87.
 
 ## Crate table
 
@@ -16,7 +16,7 @@
 | egui | 0.36.2 proposed lock (verified 2026-09-26) | Immediate-mode instruments, readouts, plots, debug shell. | Default; paired with `egui-wgpu` (to be locked at scaffold). |
 | tracing | 0.1.44 proposed lock (verified 2026-09-26) | Structured spans and events; Tracy bridge via `tracing-tracy` in dev. | Default; `attributes` for instrument macros. |
 
-Companions locked at scaffold (no guess recorded here): `egui-wgpu`, `tracing-tracy`, `thiserror`, `anyhow`, `criterion`, `postcard` (save default candidate), `mimalloc` (see [standards.md](standards.md)).
+Companions locked at scaffold (no guess recorded here): `egui-wgpu`, `tracing-tracy`, `thiserror`, `anyhow`, `criterion`, `postcard` (save default candidate), `mimalloc` (see [standards.md](standards.md)), `bytemuck` (`Pod` on render-side structs; see [simulation.md](simulation.md)).
 
 If a version cannot be verified at scaffold time, write `to be locked at scaffold` in `Cargo.toml` comments instead of guessing.
 
