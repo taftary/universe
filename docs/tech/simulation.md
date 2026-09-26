@@ -44,9 +44,20 @@ Hand-tuned Mars-like planet and thin carbon-dioxide atmosphere for the M1 descen
 
 ## Integrators and scaling
 
-- Coasting orbits propagate analytically (Kepler propagation, on rails under warp per the time-warp rules below). Numerical integration (semi-implicit Euler at MVP, velocity Verlet when the error budget needs it) is only for powered flight and atmospheric descent. Energy drift is tested as an invariant in [quality.md](quality.md).
+- Coasting orbits propagate analytically (Kepler propagation, on rails under warp per the time-warp rules below). Numerical integration (semi-implicit Euler at MVP, velocity Verlet when the error budget needs it) is only for powered flight and atmospheric descent. Energy drift is tested as an invariant in [quality.md](quality.md). Solver detail lives in Orbits and warp below.
 - Internal non-dimensionalisation is allowed inside a solver for conditioning. SI remains the interface at the gameplay level per [specs.md](../specs.md) section 2.
 - Step sizes are named constants with units, locked in `tech.md` (D-012). No frame-rate-dependent `dt`.
+
+## Orbits and warp (D-017/D-018)
+
+Implements D-017 and D-018 from [../tech.md](../tech.md). Math lives in `engine::orbit`; policy lives in `engine::warp`.
+
+- Solver (D-017): Newton-Raphson on eccentric anomaly `E`, start `E0 = M` for `e < 0.8` else `PI`, `KEPLER_TOL_RAD = 1e-12 rad`, `KEPLER_MAX_ITERATIONS = 50`, mean anomaly normalized to `[0, TAU)`, MVP range `0 <= e < 1`, typed `OrbitError`, transcendentals via `libm` only. Specific energy `-mu / (2a)` in joules per kilogram and specific angular momentum `sqrt(mu * p)` with `p = a (1 - e^2)` in square meters per second are tested as invariants around circular and eccentric orbits.
+- Elements (D-018): classical Keplerian `a/e/i/Omega/omega/M0` plus epoch `Seconds` and `Mu`, mission-elapsed `Seconds`. `Mu` is generic; for the reference planet build it from `BodyParams::gravitational_parameter_m3_s2` in `engine::body`. Issue 4 owns the orbit-body integration; body constants are not duplicated in `orbit.rs`.
+- Warp (D-018): `Warp` enum `X1/X10/X100/X1000/X10000` with `MAX_WARP_FACTOR = 10000.0 dimensionless` and `MIN_WARP_FACTOR = 1.0 dimensionless`. `request_warp` allows `1x` always and higher factors only inside a ship in orbit or transit with no atmosphere, no approach, and no alarm. `should_auto_drop` plus `apply_auto_drop` force `X1` on atmospheric entry, on approach to any body or object, and on any physiological alarm. `tick_at_warp` scales `SIM_TICK_S` (D-012).
+- Sphere of influence (D-018): Laplace radius `a (m / M)^(2/5)` via `sphere_of_influence` with `SOI_EXPONENT = 0.4 dimensionless`. `select_center` picks the dominant center by `mu / r^2`; an exact center hit returns immediately and ties keep the first maximum.
+- Determinism: `advance` is bit-identical to `propagate` to `epoch + delta`. No `std` trigonometry, square root, or power in orbit or warp code, including tests; `libm` only, so `x86_64` and `AArch64` agree.
+- Burns deferred: prograde and retrograde burns are issue 4 trajectory scope, not this issue. This module coasts only; no burn function exists here by design.
 
 ## Time-warp state machine
 
@@ -71,7 +82,7 @@ Mirrors [specs.md](../specs.md) section 2 rules exactly:
 
 - Injected RNG, clock, and IO. Sim takes a project `ProjectRng` built on `TryRng` with the blanket `Rng` impl (xoshiro256** per D-013; rand_core 0.10 deprecates the old single core trait), a `tick count` clock, and no direct file or network access.
 - Project-owned PRNG. No device RNG in sim or gen. Algorithm is pinned (D-013) and recorded in Seeds above.
-- No platform `libm` transcendentals in sim. Use the pinned project math path so x86_64 and AArch64 agree.
+- No `std` transcendentals in sim. Orbit and warp code use the pinned `libm` path so `x86_64` and `AArch64` agree; see Orbits and warp above.
 - No `HashMap` iteration in sim. Order-dependent state uses `BTreeMap` or indexed vectors.
 - Fixed `rayon` fold order where parallelism exists. Document the split count; test with two thread counts.
 - No `target-cpu=native`. Release flags are shared; see [standards.md](standards.md).
