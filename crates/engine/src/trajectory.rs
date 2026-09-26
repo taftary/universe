@@ -2083,6 +2083,9 @@ mod tests {
     }
 
     // AC3: headless full descent 300 km circular to touchdown via rest_state.
+    /// Miri-skipped: ~28k steps x up to 1200 libm exp per atmosphere sample
+    /// is interpreter-prohibitive under Miri; covered by the gates job.
+    #[cfg(not(miri))]
     #[test]
     fn full_descent_300km_to_touchdown() {
         let first = run_descent_once();
@@ -2373,6 +2376,10 @@ mod tests {
     }
 
     // AC3: headless ascent from the surface to a closed orbit.
+    /// Miri-skipped: multi-thousand climb/coast steps through libm-heavy
+    /// atmosphere sampling are interpreter-prohibitive under Miri; covered
+    /// by the gates job.
+    #[cfg(not(miri))]
     #[test]
     fn full_ascent_surface_to_closed_orbit() {
         let first = run_ascent_once();
