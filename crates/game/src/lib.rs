@@ -6,6 +6,8 @@
 
 use thiserror::Error;
 
+use engine::units::Seconds;
+
 /// Game-level errors.
 #[derive(Debug, Error)]
 pub enum GameError {
@@ -28,10 +30,10 @@ impl Game {
     ///
     /// # Errors
     ///
-    /// Returns the engine error when `step_s` is not positive.
-    pub fn new(step_s: f64, seed: u64) -> Result<Self, GameError> {
+    /// Returns the engine error when `step` is not positive and finite.
+    pub fn new(step: Seconds, seed: u64) -> Result<Self, GameError> {
         Ok(Self {
-            scheduler: engine::sim::Scheduler::new(step_s)?,
+            scheduler: engine::sim::Scheduler::new(step)?,
             seed,
         })
     }

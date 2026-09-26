@@ -10,6 +10,9 @@
 
 pub mod error;
 pub mod generation;
+pub mod hash;
 pub mod platform;
 pub mod render;
+pub mod rng;
 pub mod sim;
+pub mod units;

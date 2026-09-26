@@ -15,7 +15,7 @@ From [../README.md](../README.md) and [specs.md](specs.md) section 2. These are 
 
 ## Decisions
 
-Decisions D-001..D-008 were confirmed on 2026-09-26. Wording below is verbatim. Each links to its tracking issue.
+Decisions D-001..D-008 were confirmed on 2026-09-26; D-012..D-014 were locked on 2026-09-26 for #20. Wording below is verbatim. Each links to its tracking issue.
 
 | ID | Decision (verbatim) | Issue | Rationale |
 | --- | --- | --- | --- |
@@ -27,6 +27,9 @@ Decisions D-001..D-008 were confirmed on 2026-09-26. Wording below is verbatim. 
 | D-006 | Math/precision: glam (DVec3/DQuat sim, f32 render), unit newtypes over f64, single camera-relative f64->f32 conversion point. | #1, #2 | Double-precision sim with single-precision render per [specs.md](specs.md) section 2; detail in [tech/simulation.md](tech/simulation.md). |
 | D-007 | Errors: thiserror enums per library crate, anyhow only in binaries, panics only on contract violations. | #1, #2 | Library errors are typed; application errors are ad hoc; full rule in [tech/standards.md](tech/standards.md). |
 | D-008 | Logging/profiling: tracing + Tracy (tracing-tracy) in dev, criterion benchmarks. | #1, #2 | Structured spans from day one; continuous profiling on the reference device; gates in [tech/quality.md](tech/quality.md). |
+| D-012 | Fixed sim step SIM_TICK_S = 0.05 s, never derived from frame time. | #20 | 20 Hz base rate balances orbital coast cost against powered-flight error on the reference phone; detail in [tech/simulation.md](tech/simulation.md). |
+| D-013 | Project PRNG xoshiro256** via rand_xoshiro with SplitMix64 domain split (gen_star/gen_body/gen_terrain). | #20 | Seeded reproducible streams per domain keep star, body, and terrain generation independent; detail in [tech/simulation.md](tech/simulation.md). |
+| D-014 | Snapshot hash xxh3-64 via xxhash-rust for golden-hash tests. | #20 | Fast non-cryptographic 64-bit hash gives cross-platform state comparison without saving procedural content; policy in [tech/quality.md](tech/quality.md). |
 
 ### Candidate decisions for #14 (design, not locked)
 

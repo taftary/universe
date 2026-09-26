@@ -15,6 +15,9 @@
 | hecs | 0.11.1 proposed lock (verified 2026-09-26) | ECS storage only; scheduler is project-owned. Never in public APIs outside `engine::sim`. | Default; no `serde`, no `row` features. |
 | egui | 0.36.2 proposed lock (verified 2026-09-26) | Immediate-mode instruments, readouts, plots, debug shell. | Default; paired with `egui-wgpu` (to be locked at first use). |
 | tracing | 0.1.44 proposed lock (verified 2026-09-26) | Structured spans and events; Tracy bridge via `tracing-tracy` in dev. | Default; `attributes` for instrument macros. |
+| rand_core | 0.10.1 proposed lock (verified 2026-09-26) | PRNG core traits (`TryRng`, `Rng`, `SeedableRng`) for the injected project PRNG (D-013). | Default features. |
+| rand_xoshiro | 0.8.1 proposed lock (verified 2026-09-26) | Project PRNG xoshiro256** implementation with SplitMix64 seeding; paired with `rand_core` (D-013). | Default features. |
+| xxhash-rust | 0.8.18 proposed lock (verified 2026-09-26) | Snapshot hash xxh3-64 for golden-hash tests (D-014). | `xxh3` feature only. |
 
 Companions locked at scaffold: `thiserror` 2.0.21, `anyhow` 1.0.104, `tracing` 0.1.44 (`attributes` for instrument macros), `mimalloc` 0.1.52 (global allocator in binaries). Still to be locked at first use (no guess recorded here): `egui-wgpu`, `tracing-tracy`, `criterion`, `postcard` (save default candidate), `bytemuck` (`Pod` on render-side structs; see [simulation.md](simulation.md)).
 
