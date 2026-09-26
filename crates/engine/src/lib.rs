@@ -8,6 +8,8 @@
 //! and only after techlead review. The workspace denies `unsafe_code`; each
 //! justified use carries a per-item `expect`.
 
+pub mod atmosphere;
+pub mod body;
 pub mod error;
 pub mod generation;
 pub mod hash;

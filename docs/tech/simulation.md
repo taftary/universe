@@ -15,7 +15,7 @@ Stellar System (Lv3, star-centered inertial, meters f64)
           Subterranean (Lv8, deferred, same frame as Lv7)
 ```
 
-One active center at a time. Handoffs translate state between parent and child frames without rescaling units. Every readout required by [specs.md](../specs.md) section 8 stays continuous in both directions.
+One active center at a time. Handoffs translate state between parent and child frames without rescaling units. Every readout required by [specs.md](../specs.md) section 8 stays continuous in both directions. The orbit to surface handoff is `C0`-exact by construction: the atmosphere tapers to vacuum at 120 km (D-016) so pressure and density meet the vacuum state with no jump; see Reference planet below.
 
 ## Floating origin
 
@@ -31,6 +31,16 @@ One active center at a time. Handoffs translate state between parent and child f
 - Boilerplate is macro-generated (`impl_units!` in `engine::units`). Hand-written impls are rejected in review.
 - Ranged quantities use fallible constructors in `thiserror` style: `Kelvin::new(value_kelvin_f64)` returns `UnitError::BelowAbsoluteZero` when `value_kelvin_f64 < 0.0`. Absolute zero constant: `ABSOLUTE_ZERO_K = 0.0 kelvin`, source: SI definition.
 - Raw f64 never crosses a module boundary. Suffixes (`_m`, `_s`, `_pa`, `_k`) are required on locals that have not yet been wrapped.
+- Reference-planet sampling follows the same rule with explicit newtype signatures: `BodyParams::gravity_at_altitude(altitude: Meters) -> Result<MetersPerSecondSquared, BodyError>` and `AtmosphereParams::sample_at_altitude(altitude: Meters, body: &BodyParams) -> Result<AtmosphereState, AtmosphereError>`. Scalar coefficients without a newtype (`lapse_rate_k_per_m_f64`, `gas_constant_j_per_kg_k_f64`) carry units in their names. Bare f64 physical quantities in any other public signature are rejected in review.
+
+## Reference planet (D-015/D-016)
+
+Hand-tuned Mars-like planet and thin carbon-dioxide atmosphere for the M1 descent path in [specs.md](../specs.md) section 8. Anchors per D-015: `p0 610 Pa`, `T0 210 K`, `R 3389500 m`, `g0 3.71 m/s2`, `M 6.4171e23 kg` (NASA Mars Fact Sheet); analytic hydrostatic profile; Mars Climate Database is a validation envelope only.
+
+- Temperature is two-segment per D-016: `T(z) = T0 + L1 * z` with `L1 = -0.0012 K/m` to 50 km, isothermal 150 K above. Stored as a positive cooling rate `MARS_LAPSE_RATE_K_PER_M = 0.0012 K/m` so `T(z) = T0 - rate * z` below the tropopause.
+- Gravity is altitude-dependent per D-016: `g(z) = g0 * (R / (R + z))^2` via `BodyParams::gravity_at_altitude` (`mu / (R + z)^2`). Pressure integrates `dp/dz = -p * g(z) / (R_specific * T(z))` from the surface in fixed `PRESSURE_INTEGRATION_STEP_M = 100.0 m` slabs with midpoint temperature and gravity; `libm` provides the exponentials so x86_64 and AArch64 agree.
+- Cutoff 120 km with a 100-120 km linear taper to exactly 0 keeps the atmosphere-to-vacuum handoff `C0` continuous. Profile is `C0`-continuous on 0-120000 m with monotonic pressure and density.
+- Reference values from the locked profile: 610 Pa / 210 K at the surface, 224.4 Pa within 5 percent at one scale height (10695 m, measured 217.0 Pa), about 2.6 Pa at 50 km, about 0.005 Pa at 100 km, exactly 0 at 120 km.
 
 ## Integrators and scaling
 
