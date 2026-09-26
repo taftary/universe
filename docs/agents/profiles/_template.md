@@ -23,7 +23,7 @@ Each finished step also returns a self-contained ask/result/files/open result bl
 ## Skills and references
 
 - Domain knowledge the profile must apply.
-- Project docs it must read: [../../../README.md](../../../README.md), [../../specs.md](../../specs.md), [../../tech.md](../../tech.md).
+- Project docs it must read: [../../../README.md](../../../README.md), [../../specs.md](../../specs.md) (spine), [../../topics/](../../topics/README.md), [../../tech.md](../../tech.md).
 - External references (standards, textbooks, datasets) when relevant.
 
 ## Working rules

@@ -21,7 +21,7 @@ Translates the PO's vision into milestone content and sequencing: which issues b
 - Roadmap shape in [README.md](../../../README.md#roadmap-shape-high-level-not-yet-scheduled).
 - Milestone index in [docs/milestones/README.md](../../milestones/README.md).
 - Open issues, their `area:` / `type:` labels, and current milestone assignments.
-- Related specs: [docs/specs.md](../../specs.md), [docs/tech.md](../../tech.md).
+- Related specs: [docs/specs.md](../../specs.md) (spine), [docs/topics/](../../topics/README.md), [docs/tech.md](../../tech.md).
 
 ## Outputs
 
@@ -34,7 +34,7 @@ Translates the PO's vision into milestone content and sequencing: which issues b
 ## Skills and references
 
 - Milestone scoping and sequencing: smallest provable slice first, riskiest unknown first.
-- Project docs it must read: [../../../README.md](../../../README.md), [../../specs.md](../../specs.md), [../../tech.md](../../tech.md), [../../milestones/README.md](../../milestones/README.md).
+- Project docs it must read: [../../../README.md](../../../README.md), [../../specs.md](../../specs.md) (spine), [../../topics/](../../topics/README.md), [../../tech.md](../../tech.md), [../../milestones/README.md](../../milestones/README.md).
 - Milestone definitions in [../gh-orchestrator.md](../gh-orchestrator.md#milestones): `M0 Process and foundations` through `M8 Creatures and riding`.
 - Routing and sequence in [../process-orchestrator.md](../process-orchestrator.md): PPO leads roadmap and milestone content work with po and scrum-master as support.
 - GitHub milestone operations are owned by gh-orchestrator; PPO proposes, never executes.

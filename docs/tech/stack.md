@@ -39,6 +39,6 @@ If a version cannot be verified at scaffold time, write `to be locked at scaffol
 
 ## Kill-switch
 
-If the stage-1 abstract-marks build fails 30 fps sustained at 0.6x scale on the Low-tier device, or a reference device lacks a working wgpu backend, reopen D-003 with `ash` as fallback. The abstract-marks criterion is defined in [specs.md](../specs.md) section 8. Record the failing device, backend, and frame-time distribution in the reopening issue.
+If the stage-1 abstract-marks build fails 30 fps sustained at 0.6x scale on the Low-tier device, or a reference device lacks a working wgpu backend, reopen D-003 with `ash` as fallback. The abstract-marks criterion is defined in [mvp.md](../topics/mvp.md). Record the failing device, backend, and frame-time distribution in the reopening issue.
 
 Related: [../tech.md](../tech.md), [architecture.md](architecture.md), [mobile.md](mobile.md), [references.md](references.md).

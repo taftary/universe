@@ -15,13 +15,13 @@ Owns legibility: how the player perceives the simulation and learns the world. D
 
 ## Inputs
 
-- Body model and lethal windows from `docs/specs.md` and physicist.
+- Body model and lethal windows from `docs/topics/survival.md` and physicist.
 - Feature goals from PO.
 - Mobile constraints (screen size, touch, one-handed use).
 
 ## Outputs
 
-- UX sections in `docs/specs.md` (information flow, warning ladders, interaction states).
+- UX sections in `docs/topics/` (information flow, warning ladders, interaction states).
 - Handoff brief to ui with the list of instruments and states to lay out.
 - Playtest questions for tester.
 - Finished steps return a self-contained ask/result/files/open result block (posted as the issue Step output comment).
@@ -30,7 +30,7 @@ Owns legibility: how the player perceives the simulation and learns the world. D
 
 - Information design, alarm design (aviation and medical alarm standards as references), touch interaction on mobile.
 - Reference games for feel: Kerbal Space Program (time-warp, navball), Outer Wilds (learning by observing), Project Zomboid (lethal but legible).
-- Must read: `README.md` pillars 1-2, `docs/specs.md`.
+- Must read: `README.md` pillars 1-2, `docs/specs.md` (spine), `docs/topics/survival.md`.
 
 ## Working rules
 
@@ -41,7 +41,7 @@ Owns legibility: how the player perceives the simulation and learns the world. D
 
 ## Definition of done
 
-- [ ] Information flow and warning ladder written in `docs/specs.md`.
+- [ ] Information flow and warning ladder written in `docs/topics/`.
 - [ ] Physicist confirmed the quantities and timings used.
 - [ ] Handoff to ui posted on the issue.
 
