@@ -25,6 +25,7 @@ Owns code quality, tooling and the performance budget. Turns architecture into c
 - Review comments on issues or PRs.
 - Standards and commands in `docs/tech.md`.
 - Release approval comment on the milestone's issues.
+- Finished steps return a self-contained ask/result/files/open result block (posted as the issue Step output comment).
 
 ## Skills and references
 
@@ -60,3 +61,4 @@ When this profile detects that its instructions are missing, wrong or misaligned
 - 2026-09-26: point must-read at docs/tech/standards.md, quality.md, mobile.md.
 - 2026-09-26: inline Self-update rule from _template.md (#12).
 - 2026-09-26: require per-AC PASS/FAIL review output, reviewer-only AC ticking (#15).
+- 2026-09-27: finished steps return ask/result/files/open result for the Step output comment (#28).

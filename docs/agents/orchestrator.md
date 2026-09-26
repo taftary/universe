@@ -53,7 +53,7 @@ Sequencer rules:
 - Before each spawn, check the DAG: related means same issue or overlapping files. If related, wait for the prior step to finish.
 - Files versus gh split: profiles edit files only; [gh-orchestrator.md](gh-orchestrator.md) owns all `gh` and `git` write operations.
 
-Loop for each Step: check DAG -> spawn profile -> spawn gh-orchestrator (Update plan subtasks / Update acceptance criteria recipe) -> next.
+Loop for each Step: check DAG -> spawn profile (it returns a self-contained ask/result/files/open result) -> spawn gh-orchestrator (Update plan subtasks: Step output comment then step-done pointer / Update acceptance criteria recipe) -> next.
 
 ### 4. Close
 
@@ -67,7 +67,7 @@ When process-orchestrator reports done, verify:
 - [ ] Issue status label is `status:done` and the issue is closed with a closing comment summarising what changed and where.
 - [ ] All AC in body ## Acceptance criteria are checked, ticked via reviewer-only Update acceptance criteria recipe (reviewer is not the author).
 - [ ] ## Decisions has no line ending with open.
-- [ ] A step-done comment exists per Step in ## Subtasks.
+- [ ] A Step output comment plus a step-done comment exist per Step in ## Subtasks.
 - [ ] Closing comment posts the filled Close checklist plus commit sha and docs touched.
 - [ ] Branch created via gh issue develop and visible in Development panel.
 - [ ] PR body contains Closes #nn; PR has type:/area: labels and milestone.

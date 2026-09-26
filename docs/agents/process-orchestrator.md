@@ -47,12 +47,12 @@ With `tracking: off` the same steps run but outputs are reported to the user ins
 
 ## Progress cadence
 
-Each step boundary follows this order: profile returns -> gh-orchestrator ticks the Step, posts the step-done comment, flips the status label if it changes -> then the next profile is spawned. Batching step updates is forbidden.
+Each step boundary follows this order: profile returns a self-contained result -> gh-orchestrator ticks the Step, posts the Step output comment then the step-done comment, flips the status label if it changes -> then the next profile is spawned. Batching step updates is forbidden.
 
 - Step 2 (Plan) writes acceptance criteria into the body `## Acceptance criteria` and resolves open questions into `## Decisions`. Any question still open means `status:blocked` (no `status:in-progress` with open questions).
 - Step 4 (Review) output is one PASS/FAIL line per AC; the reviewer ticks passing ones via the Update acceptance criteria recipe; any FAIL adds a follow-up Step and returns to `status:in-progress`.
 - Label + Project Status flip together: every `status:` label change and its matching Project Status change run in the same gh-orchestrator step; never one without the other.
-- The plan comment is a pointer only; the body is single source of truth.
+- The step-done comment is a pointer only; the Step output comment is the record; the body is single source of truth.
 
 ## Depth-1 execution
 
@@ -93,6 +93,8 @@ done when: <acceptance criterion>
 
 Handoff note: implementation briefs cite `docs/tech/standards.md` for layout, lints, and performance rules. Implementation briefs for CI failures include the failed log excerpt.
 
+Result rule: each profile returns a self-contained result block (`ask:`, `result:`, `files:`, `open:`) so gh-orchestrator can post it verbatim as the Step output comment (see [gh-orchestrator.md](gh-orchestrator.md#update-plan-subtasks)). Never rely on subagent session history; the issue comments are the history.
+
 ## Blocked
 
 If a profile cannot proceed (missing decision, missing data, conflicting docs, open Decision at end of Plan): set `status:blocked`, comment the blocker on the issue, and return to the orchestrator with the question for the user.
@@ -119,3 +121,4 @@ If a request keeps landing on the wrong profile, or a needed profile does not ex
 - 2026-09-26: define depth-1 execution, DAG wait rule, files-vs-gh split, and issue subtask plan format (#10); fix sequencer wording per #10 audit.
 - 2026-09-26: enforce per-step gh-orchestrator cadence, body AC+Decisions sections, per-AC review verdicts with FAIL->follow-up Step (#15).
 - 2026-09-26: Project mirror + Development linkage + CI watch loop (max 2) in sequence (#16).
+- 2026-09-27: record every finished Step output as an issue comment before the step-done pointer (#28).

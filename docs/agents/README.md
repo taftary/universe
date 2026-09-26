@@ -40,7 +40,7 @@ Plan and DAG: the plan lives in issue subtasks, one line per step as `- [ ] Step
 | 6. Close | `status:done` | Done | PR ready, checks, squash merge, delete | Close |
 | any (blocked) | `status:blocked` | Blocked | — | Update status |
 
-Rules: reviewer is never the author; the reviewer `agent:` label is added before `status:review`; `status:blocked` may interrupt any step with a blocker comment. Cadence: gh-orchestrator records after EVERY Step before the next spawn (no batching); only the reviewer ticks AC; plan comment is a pointer, body is source of truth.
+Rules: reviewer is never the author; the reviewer `agent:` label is added before `status:review`; `status:blocked` may interrupt any step with a blocker comment. Cadence: gh-orchestrator records after EVERY Step before the next spawn (no batching): Step output comment first, then the step-done pointer; only the reviewer ticks AC; step-done comment is a pointer, Step output comment is the record, body is source of truth.
 
 ## Adapters
 

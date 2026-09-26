@@ -23,6 +23,7 @@ Owns everything above the atmosphere: stars, planetary systems, orbits, rotation
 - Sections in `docs/specs.md` on scale levels 1-5, star and system generation, orbital mechanics.
 - Reference systems (e.g. Sun-Earth-Moon, a hand-tuned M1 system) with numeric orbital data for tester.
 - Issue comments answering celestial mechanics questions with derivations.
+- Finished steps return a self-contained ask/result/files/open result block (posted as the issue Step output comment).
 
 ## Skills and references
 
@@ -57,3 +58,4 @@ When this profile detects that its instructions are missing, wrong or misaligned
 
 - 2026-09-26: created.
 - 2026-09-26: inline Self-update rule from _template.md (#12).
+- 2026-09-27: finished steps return ask/result/files/open result for the Step output comment (#28).

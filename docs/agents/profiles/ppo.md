@@ -29,6 +29,7 @@ Translates the PO's vision into milestone content and sequencing: which issues b
 - Milestone assignment and ordering proposals, written as issue comments for the orchestrator to apply via gh-orchestrator.
 - Milestone DoD checklists used at review and close time.
 - Status notes on milestone progress and scope risks.
+- Finished steps return a self-contained ask/result/files/open result block (posted as the issue Step output comment).
 
 ## Skills and references
 
@@ -66,3 +67,4 @@ When this profile detects that its instructions are missing, wrong or misaligned
 - 2026-09-26: created as stub.
 - 2026-09-26: expanded to full template structure; added milestone ownership, M0-M8 sequencing, milestone DoD, and vision-change boundary (#12).
 - 2026-09-26: fixed invalid relative links to root README, docs specs, tech, and milestones index (#12).
+- 2026-09-27: finished steps return ask/result/files/open result for the Step output comment (#28).

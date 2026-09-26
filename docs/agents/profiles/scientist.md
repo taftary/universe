@@ -30,6 +30,7 @@ Owns the non-physics sciences in the planet pipeline and resource model: atmosph
 - Assay and contamination rules that feed physiology (specs section 4): what is unknown until measured, what poisons, what needs filtering.
 - Reference compositions and concentrations with tolerances for tester.
 - Issue comments answering chemistry, geology, and biology questions with sources or derivations.
+- Finished steps return a self-contained ask/result/files/open result block (posted as the issue Step output comment).
 
 ## Skills and references
 
@@ -69,3 +70,4 @@ When this profile detects that its instructions are missing, wrong or misaligned
 
 - 2026-09-26: created as stub.
 - 2026-09-26: expanded from stub to full template structure with chemistry, geology, and biology specifics and inline self-update rule.
+- 2026-09-27: finished steps return ask/result/files/open result for the Step output comment (#28).
