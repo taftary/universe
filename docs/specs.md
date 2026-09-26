@@ -287,6 +287,21 @@ Reference orbit model (D-017/D-018). Coasting orbits use classical Keplerian ele
 | Moon orbit `a` | 3.84399e8 m | Reference value for tests |
 | Mars orbit `a` | 2.279392e11 m | Reference value for tests |
 
+Reference trajectory model (D-019/D-020/D-021). Point-ship burns, rails-to-atmosphere integration, flight regimes, and surface contact share one body gravity field and one corotating wind, with a `C0`-exact handoff at 120 km in both directions.
+
+| Constant | Value | Source |
+| --- | --- | --- |
+| Ballistic coefficient `B` | 120 kg/m2 | D-020 (physicist preset) |
+| Nose radius `r_n` | 1.0 m | D-020 (physicist preset) |
+| Sutton-Graves `k` | 1.9027e-4 SI for `q = k * sqrt(rho / r_n) * v^3` | D-020 (Sutton and Graves 1971) |
+| g-load denominator | 9.80665 m/s2 (exact SI standard gravity) | D-020 |
+| Integrator | Semi-implicit Euler, velocity first then position, forces at step start, `dt <= 0.05 s` (`MAX_STEP_S = SIM_TICK_S`) | D-020 |
+| Rails cutoff | Analytic rails above 120 km, integration at or below, exact-time split when a step straddles, end aero clamped with rails ends at exactly zero | D-020 |
+| Drag | `a = -rho * \|vrel\| * vrel / (2 * B)` with corotating `vrel`, no lift at MVP | D-020 |
+| Burn check | Vis-viva within 1e-6 relative, state-elements-state round-trip within 1e-9 relative | D-019 |
+| Regimes | Orbit above 120 km / Atmosphere in (0, 120 km] / Surface at or below 0 m, adjacent-only transitions | D-021 |
+| Touchdown | Altitude 0.5 m and surface-relative speed 5 m/s, penetration settles via rest state | D-021 |
+
 ### 8.5 Explicitly Cut
 
 Rendering of any kind; generation; physiology and the suit; terrain tiles; weather; moons; additional bodies; ship mass or propellant budget (the point-ship has unlimited delta-v for this test).

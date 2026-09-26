@@ -15,7 +15,7 @@ From [../README.md](../README.md) and [specs.md](specs.md) section 2. These are 
 
 ## Decisions
 
-Decisions D-001..D-008 were confirmed on 2026-09-26; D-012..D-014 were locked on 2026-09-26 for #20; D-015..D-016 were locked on 2026-09-26 for #22; D-017..D-018 were locked on 2026-09-26 for #23. Wording below is verbatim. Each links to its tracking issue.
+Decisions D-001..D-008 were confirmed on 2026-09-26; D-012..D-014 were locked on 2026-09-26 for #20; D-015..D-016 were locked on 2026-09-26 for #22; D-017..D-018 were locked on 2026-09-26 for #23; D-019..D-021 were locked on 2026-09-26 for #26. Wording below is verbatim. Each links to its tracking issue.
 
 | ID | Decision (verbatim) | Issue | Rationale |
 | --- | --- | --- | --- |
@@ -34,6 +34,9 @@ Decisions D-001..D-008 were confirmed on 2026-09-26; D-012..D-014 were locked on
 | D-016 | Analytic 2-segment T(z) (T0+L1*z to 50 km, 150 K above), altitude-dependent g(z)=g0*(R/(R+z))^2, cutoff 120 km with 100-120 km taper, C0-exact. | #22 | Two-segment temperature with altitude-dependent gravity and a tapered vacuum handoff keeps every readout continuous across the orbit to surface path; detail in [tech/simulation.md](tech/simulation.md). |
 | D-017 | Newton-Raphson on E, E0=M for e<0.8 else PI, KEPLER_TOL_RAD 1e-12, KEPLER_MAX_ITER 50, M normalized, e<1e-8 circular guard, MVP 0<=e<1, typed errors, transcendentals via libm crate only. | #23 | Deterministic Kepler coast with named tolerance and cap keeps warp on rails; detail in [tech/simulation.md](tech/simulation.md). |
 | D-018 | Classical Keplerian a/e/i/Omega/omega/M0 + epoch Seconds + mu, mission-elapsed Seconds, Warp enum X1/X10/X100/X1000/X10000 with MAX_WARP_FACTOR 10000.0, SOI owned by orbit.rs, per-tick propagate/advance/request_warp interface. | #23 | Classical elements with unit-typed epoch plus the enum warp ladder encode [specs.md](specs.md) sections 2 and 8; detail in [tech/simulation.md](tech/simulation.md). |
+| D-019 | Impulsive prograde/retrograde burns along the inertial velocity unit vector with non-negative unit-typed delta-v, unchanged position and epoch, zero-speed rejection, vis-viva post-burn check within 1e-6 relative and elements round-trip within 1e-9 relative. | #26 | Burns shift energy along the velocity direction without touching the coasting model; detail in [tech/simulation.md](tech/simulation.md). |
+| D-020 | Point-ship trajectory with analytic rails above 120 km and semi-implicit Euler at SIM_TICK_S 0.05 s below, shared body g(z) and corotating relative wind, drag a = -rho * \|vrel\| * vrel / (2 * B) with B 120 kg/m2, Sutton-Graves q = k * sqrt(rho / r_n) * v^3 with k 1.9027e-4 SI and r_n 1.0 m, g-load over 9.80665 m/s2, exact-time split at the cutoff with C0 aero handoff, Mu from BodyParams, transcendentals via libm crate only. | #26 | One gravity field and one wind feed rails and integration so the descent path stays continuous; detail in [tech/simulation.md](tech/simulation.md). |
+| D-021 | Flight regimes Orbit above 120 km / Atmosphere in (0, 120 km] / Surface at or below 0 m with classify/classify_state, adjacent-only transitions, signed distance to Rails/Surface boundaries, warp mapping orbit-cruise / atmosphere-entry auto-drop / surface-grounded, surface contact via altitude plus corotating relative speed with touchdown at 0.5 m and 5 m/s. | #26 | Regime labels gate the integrator choice and warp policy while surface geometry settles touchdown; detail in [tech/simulation.md](tech/simulation.md). |
 
 ### Candidate decisions for #14 (design, not locked)
 

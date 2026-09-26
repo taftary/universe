@@ -1,6 +1,6 @@
 # M1 Orbit to Surface
 
-GitHub milestone 2. Open. Delivered so far: #14, #20.
+GitHub milestone 2. Open. Delivered so far: #14, #20, #22, #23. Pending: #26.
 
 ## Goal
 
@@ -14,6 +14,9 @@ Section 8.7 four tests: continuity, repeatability, budget, legibility.
 
 - #14 Debug shell design ([../tech/debug.md](../tech/debug.md), closed)
 - #20 Close foundations gap: units, SIM_TICK_S, PRNG, hash (this issue — closed by the PR merge)
+- #22 Reference planet and atmosphere (closed)
+- #23 Orbits and warp (closed)
+- #26 Trajectory, surface, and handoffs (pending, this issue)
 
 ## Plan
 
