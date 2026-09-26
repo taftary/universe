@@ -13,10 +13,10 @@
 | naga | 30.0.1 proposed lock (verified 2026-09-26) | WGSL shader validation via wgpu; pinned to match wgpu line. | Aligned with wgpu; no standalone use in `game`. |
 | glam | 0.33.10 proposed lock (verified 2026-09-26) | Math: `DVec3` / `DQuat` in sim (f64), `Vec3` / `Quat` in render (f32). | Default; no `serde` unless persistence needs it. |
 | hecs | 0.11.1 proposed lock (verified 2026-09-26) | ECS storage only; scheduler is project-owned. Never in public APIs outside `engine::sim`. | Default; no `serde`, no `row` features. |
-| egui | 0.36.2 proposed lock (verified 2026-09-26) | Immediate-mode instruments, readouts, plots, debug shell. | Default; paired with `egui-wgpu` (to be locked at scaffold). |
+| egui | 0.36.2 proposed lock (verified 2026-09-26) | Immediate-mode instruments, readouts, plots, debug shell. | Default; paired with `egui-wgpu` (to be locked at first use). |
 | tracing | 0.1.44 proposed lock (verified 2026-09-26) | Structured spans and events; Tracy bridge via `tracing-tracy` in dev. | Default; `attributes` for instrument macros. |
 
-Companions locked at scaffold (no guess recorded here): `egui-wgpu`, `tracing-tracy`, `thiserror`, `anyhow`, `criterion`, `postcard` (save default candidate), `mimalloc` (see [standards.md](standards.md)), `bytemuck` (`Pod` on render-side structs; see [simulation.md](simulation.md)).
+Companions locked at scaffold: `thiserror` 2.0.21, `anyhow` 1.0.104, `tracing` 0.1.44 (`attributes` for instrument macros), `mimalloc` 0.1.52 (global allocator in binaries). Still to be locked at first use (no guess recorded here): `egui-wgpu`, `tracing-tracy`, `criterion`, `postcard` (save default candidate), `bytemuck` (`Pod` on render-side structs; see [simulation.md](simulation.md)).
 
 If a version cannot be verified at scaffold time, write `to be locked at scaffold` in `Cargo.toml` comments instead of guessing.
 

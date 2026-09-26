@@ -1,0 +1,70 @@
+# Universe workspace. The `[workspace.lints]` block and `[profile.release]`
+# are verbatim copies from `docs/tech/standards.md`, the single source of truth.
+
+[workspace]
+resolver = "2"
+members = ["crates/engine", "crates/game", "crates/debug", "crates/tools", "."]
+default-members = ["crates/engine", "crates/game", "crates/tools", "."]
+# `universe-debug` is excluded from the default set: it is a dev-only shell
+# and is never built unless requested (see `crates/debug/Cargo.toml`).
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+# Never published to a registry; choosing a license is a separate decision.
+publish = false
+# Floor from the max-MSRV rule in `docs/tech/stack.md`: `egui` 0.36.2 declares
+# `rust-version` 1.95, so the workspace floors at 1.95, not 1.87.
+rust-version = "1.95"
+
+[workspace.dependencies]
+# One source for versions (`docs/tech/standards.md`); caret within the locked
+# major lines (`docs/tech/stack.md`). Render and UI crates (`wgpu`, `winit`,
+# `naga`, `egui`) join the used set when the first render code lands.
+glam = "0.33"
+# Wired when the scheduler-storage work lands (D-004); kept here so the lock
+# line stays the single source.
+hecs = "0.11"
+thiserror = "2"
+anyhow = "1"
+tracing = { version = "0.1", features = ["attributes"] }
+mimalloc = "0.1"
+universe-engine = { path = "crates/engine" }
+universe-game = { path = "crates/game" }
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+unsafe_op_in_unsafe_fn = "deny"
+missing_docs = "warn"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
+style = { level = "warn", priority = -1 }
+complexity = { level = "warn", priority = -1 }
+perf = { level = "warn", priority = -1 }
+correctness = { level = "deny", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+undocumented_unsafe_blocks = "deny"
+cast_possible_truncation = "warn"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+overflow-checks = true
+
+[package]
+name = "universe"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+universe-engine.workspace = true
+universe-game.workspace = true

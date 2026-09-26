@@ -18,7 +18,7 @@ All crates share `[workspace.dependencies]` and `[workspace.lints]`. Full lint b
 ## Boundary rules
 
 - `engine::sim` is headless-testable. It depends only on `glam`, unit types, and the project PRNG. No `winit`, no `wgpu`, no `egui`, no file IO.
-- `engine::gen` is pure and deterministic. Same seed yields same inputs to sim. No wall clock, no thread-dependent order. Procedural content is never saved; see [simulation.md](simulation.md) and [persistence.md](persistence.md).
+- `engine::generation` is pure and deterministic. Same seed yields same inputs to sim. No wall clock, no thread-dependent order. Procedural content is never saved; see [simulation.md](simulation.md) and [persistence.md](persistence.md). (Named `generation`, not `gen`: `gen` is a reserved keyword under the edition 2024 locked in D-001.)
 - `game` has no GPU code. It wires sim, gen, and instruments. Any draw call outside `engine::render` or `debug` is a bug.
 - `debug` never leaks into release. It is a non-default workspace member (binary); it is not built unless requested and is excluded from release builds. Instruments shown to players live in `game` via `egui`; the debug shell lives in `debug`.
 - Platform code sits behind traits in `engine`. Callers use `PlatformClock`, `PlatformFs`, `PlatformThermal` traits. Concrete implementations are injected; tests inject fakes.
@@ -36,7 +36,7 @@ Maps [specs.md](../specs.md) section 3 levels 3-8 to owners. Levels 1-2 are a st
 | Lv4 Planetary System | `engine::sim::orbits` | Sphere-of-influence handoff; one active center at a time. |
 | Lv5 Orbital Expanse | `engine::sim::trajectory` | Entry corridor, heating proxy output, g-load output. |
 | Lv6 Atmospheric | `engine::sim::atmo` | Composition-driven pressure, temperature, density profile by altitude. |
-| Lv7 Terrain | `engine::sim::surface` + `engine::gen` | Local gravity, surface pressure and temperature; tiles streamed later. |
+| Lv7 Terrain | `engine::sim::surface` + `engine::generation` | Local gravity, surface pressure and temperature; tiles streamed later. |
 | Lv8 Subterranean | Deferred | Trait stub only; no behavior. |
 
 Readouts stay continuous across every handoff in both directions, per [specs.md](../specs.md) section 8.

@@ -1,0 +1,25 @@
+# `cargo deny` configuration. Blocks unapproved licenses and duplicate
+# versions (`docs/tech/standards.md`); enforced by CI (`docs/tech/quality.md`).
+# Schema follows cargo-deny 0.20: vulnerabilities always deny; non-allowed
+# licenses deny by default; `unmaintained` takes a scope, not a level.
+
+[advisories]
+yanked = "deny"
+unmaintained = "workspace"
+
+[licenses]
+allow = ["Apache-2.0", "MIT", "Unicode-3.0"]
+
+# Workspace crates are unpublished (`publish = false` in manifests), so their
+# (deliberately absent) license expressions are not checked. Choosing a
+# license is a separate decision, not scaffold's to make.
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "deny"
+# syn v2 (via tracing-attributes) and syn v3 (via thiserror-impl 2.x) coexist:
+# proc-macro transitive split, no single major line available at scaffold.
+skip = [
+    { crate = "syn", reason = "syn v2 and v3 coexist via tracing and thiserror-impl" },
+]

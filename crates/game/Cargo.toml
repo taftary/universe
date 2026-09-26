@@ -1,0 +1,17 @@
+[package]
+name = "universe-game"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lib]
+name = "game"
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+universe-engine.workspace = true
+thiserror.workspace = true
