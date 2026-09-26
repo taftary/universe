@@ -1,87 +1,142 @@
-# Project README — Seamless Procedural Universe
+# Project README — Seamless Realistic Universe
 
-**Status:** Design phase (pre-production)  
+**Status:** Design phase (pre-production) — realism-first redesign  
 **Last updated:** September 2026
+
+**Design constraints (fixed):**
+
+- **Mobile-first.** Reference target is a mid-range phone. Desktop gets the same game, scaled up — never the reverse.
+- **Simulation realism over visual realism.** Every number the player sees is physically derived. Visuals are plausible and cheap.
+- **Real physics, no FTL.** Real distances, real orbits, real time — made legible with player-controlled time-warp.
+- **Lethal physiology.** Where physics kills, the game kills. Warning comes from instruments and symptoms, not from softened rules.
+- **Solo-buildable.** One set of physical models reused everywhere; content is inputs, not new mechanics.
 
 ## What This Is
 
-A game built around one core fantasy: a single, unbroken universe you can zoom into — from the cosmic web all the way down to the ground beneath your feet — and survive on, indefinitely, once you land.
+A game built around one core fantasy: a single, unbroken universe you can travel through — from orbit above a star system down to the ground beneath your feet — and survive on, for as long as your engineering and your stores allow, once you land.
 
-Structurally, it combines two proven ideas that are rarely combined well:
+Two ideas, combined:
 
-- **Seamless scale traversal**, in the spirit of No Man's Sky — no loading screens between space and surface, no separated "modes." One continuous universe.
-- **Indefinite personal survival** — the core, permanent gameplay loop is managing your own survival on a hostile planet, forever, with gear progression as the reward structure. Not a means to an end (like escaping or winning) — survival is the game.
+- **Real-scale, seamless traversal.** No loading screens between space and surface, no separate "modes." Distances, times, pressures and temperatures are not compressed. A descent from orbit is a real reentry; a trip to the next planet takes real months, lived through time-warp.
+- **Bounded personal survival.** The permanent gameplay loop is keeping a human body alive on a world that was not made for it. Not a means to an end — survival is the game. Air and water can be replenished locally with power; food cannot on a dead world, so every landing is on a clock. Progression is engineering that pushes that horizon outward: better insulation, better scrubbers, more shielding, more delta-v, more watts.
 
-Robot-operated colonies, base-building, and large-scale automation are part of the long-term vision but are explicitly deferred — they are not part of the current design pass or the near-term roadmap. The project is being built in deliberately narrow, provable slices.
+Reference points for feel (not structure): **Kerbal Space Program** for orbital mechanics and time-warp, **Outer Wilds** for a small, physically coherent system you learn by observing, **Project Zomboid** for survival that is lethal but always legible.
+
+Robot-operated colonies, base-building, creatures and riding remain part of the long-term vision, but they now follow from the physical systems below rather than being layered on top of them. The project is built in narrow, provable slices.
 
 ## The Core Pillars
 
-### 1. Seamless Scale
+### 1. Real Scale, Real Physics
 
-The universe is structured as 8 canonical zoom levels, from the cosmic web down to standing on terrain, with an acknowledged (but currently unbuilt) subterranean layer beneath that. Full detail lives in the scale table (see game_spec.md), but the short version:
+The universe is structured as 8 canonical levels, split into two groups:
 
 ```
-Universe → Galactic → Stellar System → Planetary System → Orbital Expanse → Atmospheric → Terrain → Subterranean
+Observable (read-only):   Universe → Galactic
+Navigable (real SI units): Stellar System → Planetary System → Orbital Expanse → Atmospheric → Terrain → Subterranean
 ```
 
-The hardest, highest-risk part of this system is the orbit-to-surface transition (levels 5→6→7) — this is where most games in this genre show visible seams or compromises, and it's treated as the single most important technical problem to solve first.
+- **Observable levels (Lv1–2)** are the sky and the star map. Without FTL they are never traversed — they are what you see when you look up, and what you navigate *by*. The existing cosmic-web prototype becomes a backdrop asset here.
+- **Navigable levels (Lv3–8)** run in real units: meters, seconds, kilograms, kelvin, pascals. Orbits are Keplerian (patched conics first, n-body if ever justified). Moving between bodies costs delta-v and propellant. Time-warp is the player's tool for making real durations playable — 1x on foot, accelerated in orbit and transit.
 
-### 2. Indefinite Survival
+The hardest, highest-risk part remains the orbit-to-surface transition (Lv5→6→7), but the bar is redefined. It is not enough for it to *look* seamless: altitude, velocity, air pressure, external temperature and reentry heating must all come from one continuous physical model, readable on the suit or ship instruments the entire way down and back up.
 
-Once a player lands, the game becomes about managing four independent survival stats: **Oxygen**, **Hydration**, **Hunger**, and **Temperature**. Three of these are ongoing resource hunts (you're always low on something); Temperature is the exception — a gear-preparation check rather than a consumable. All harm is escalating and recoverable if the player reacts in time — nothing kills instantly. Gear upgrades reduce consumption and risk rather than adding new systems, which is what lets survival stay interesting indefinitely without needing new mechanics bolted on over time.
+Mobile implication: seamlessness is achieved through floating-origin / camera-relative rendering and cheap streamed LOD, not through rendering detail. A phone can integrate an orbit and an atmosphere profile trivially; it cannot render a forest. Spend accordingly.
 
-### 3. Procedural Planets (Future)
+### 2. Lethal Physiology
 
-Every planet is meant to offer some version of every core resource, just reskinned to fit its biome — an ice planet might have abundant fuel but scarce oxygen, a toxic planet the reverse. This is what gives exploration purpose: you're not hunting exotic materials, you're hunting enough of the basics, and the mix changes everywhere you go. Not yet implemented — current planets are hand-built, not procedural.
+The four abstract survival bars are replaced by a body model. The player manages what a real human in a real suit would manage:
 
-### 4. Building & Robot-Operated Colonies (Future, deferred)
+| System | What is tracked | Real lethal window (approx.) |
+| --- | --- | --- |
+| Breathing gas | ppO₂, ppCO₂, total pressure, scrubber capacity | Vacuum / depressurization: seconds. Hypoxia or CO₂ buildup: minutes |
+| Heat balance | Metabolic heat vs. conduction, convection, radiation, evaporation; insulation of gear | Extreme cold or heat: minutes to hours |
+| Water & electrolytes | Intake, sweat loss, contamination (chemical, biological, salinity) | Dehydration: days. Toxic water: hours to days |
+| Energy | kcal in vs. basal metabolism + activity + thermogenesis; food spoilage by temperature and time | Starvation: weeks |
+| Radiation | Cumulative dose (mSv); shielding by mass, depth, atmosphere, magnetosphere | Acute: hours to days. Chronic: cumulative |
+| Sleep & fatigue | Sleep pressure, work capacity | Degradation over days |
+| Injury | Trauma, bleeding, infection, decompression injury | Seconds to days depending on injury |
 
-The long-term vision includes a building system the player uses to establish colonies after landing, operated primarily through robots rather than direct manual labor. Two robot roles are planned:
+Design rules:
 
-- **Worker bots** — handle repetitive tasks on the player's behalf (resource extraction, hauling, maintenance), so the colony automates itself over time rather than demanding constant manual attention.
-- **Warrior bots** — defend the player and the colony, handling combat so the player isn't solely responsible for base defense.
+- **Warnings come from instruments and symptoms** — suit alarms, gauges, blurred vision, shivering — not from a rule that delays the outcome. If the player ignores a depressurization alarm, they die in seconds, as they would.
+- **Difficulty comes from the planet, not from tuning.** A thin CO₂ atmosphere at 210 K is hard because of what it is. Nothing is tuned to feel hard.
+- **Gear is engineering, not multipliers.** A suit has an insulation value, a scrubber has a capacity in CO₂ per hour, a shelter has a shielding mass. Upgrades change those numbers.
+- **Open-ended by construction.** Because conditions come from the world, every new world is a new problem without new mechanics.
 
-Eventually, colonies extract resources, sustain themselves, and support launching onward to new systems. This layer has been intentionally set aside so the foundational systems (scale traversal, survival) can be proven first, on their own, without colony complexity muddying the test.
+### 3. Planets From Physics
 
-### 5. Creatures & Riding (Future, deferred)
+Most worlds are dead. That is the realistic premise, and it is what gives exploration its purpose: you are looking for — and learning to read — a habitable window.
 
-Planets are intended to host varied native creatures, some of which the player can tame and ride for traversal. This is planned as a later addition once base survival and terrain systems are solid — creatures need believable habitats and behavior to be worth building, which depends on the procedural planet work landing first.
+Planets are generated by a deterministic pipeline, not by reskinning a resource list:
 
-### 6. Vehicles & Machines
+```
+Star (mass, age, luminosity)
+→ Protoplanetary disk (mass, metallicity)
+→ Planet mass, radius, orbit, eccentricity, rotation
+→ Volatile inventory and atmosphere retention (escape velocity, temperature, magnetosphere)
+→ Greenhouse balance → surface temperature and pressure
+→ Water phase (ice, liquid, vapor, none) → hydrology
+→ Geology (tectonics, volcanism, erosion) → terrain, regolith, minerals
+→ (Rarely) biology → biosphere
+```
 
-Traversal and colony operation are expected to rely on a range of player-operable machines beyond the base character on foot: ground vehicles for surface travel, aircraft for atmospheric flight, and ships for orbital and interplanetary travel, alongside whatever supporting machines the building and colony systems require (e.g., transport for resources, construction equipment). These tie directly into the scale system — vehicles and aircraft are the natural way a player would move through the Atmospheric and Terrain layers, and ships handle the Orbital Expanse and beyond. Not yet designed in detail; noted here as a required system once traversal needs to extend past walking on foot.
+Resources emerge from that chain. Water is where the pressure/temperature allow it; oxygen only where something produced it; metals where geology concentrated them. An ice world and a hot desert world differ because their inputs differ, not because they were assigned different flavors.
+
+Getting those resources into the player's hands is engineering, not gathering. Almost nothing on a dead world is usable as picked up: ice must be melted, water split, CO₂ cracked, each at a real kWh-per-kg cost. Power is the primary resource. The player's verbs are *prospect* (instruments), *deploy* and *maintain* (machines), and *wait* (time-warp); hands collect only loose ice, meteorite fragments, samples and salvage. Worlds invert each other's bottlenecks — a Mars-like world has oxidiser but no fuel-friendly nitrogen, a Titan-like world has fuel but no oxidiser, an icy moon has water but no metals — which is what makes generation matter. Food has no dead-world source; it is carried, grown at colony scale, or found on a rare living world. There is no gather-and-craft loop.
+
+Mobile fit: the pipeline runs once per seed and caches. It is arithmetic, not rendering.
+
+### 4. Machines as Engineering
+
+Because there is no FTL, ships are not optional. Every machine is a physical object with a budget:
+
+- **Ships** — mass, propellant, specific impulse, thrust, heat-shield capacity, life-support consumables per crew-hour. Reentry is a trajectory with real heating and g-loads, not a camera path. The ship carries its own return propellant, so what you can land is bounded by what you need to leave; landing is a commitment. Making propellant on the surface is a months-long plant operation, never a refuel stop.
+- **Aircraft** — lift and drag from the actual air density of the world you are on. Thin atmospheres barely fly; thick ones fly easily and crush you.
+- **Ground vehicles** — traction, power, thermal management, dust.
+- **Time-warp** lives here: 1x on foot, accelerated inside a ship in orbit or transit, always under player control.
+
+## Long-Term Vision (Grounded in the Pillars)
+
+These remain part of the intended game but are explicitly deferred. Each depends on a physical system above being real first.
+
+- **Colonies and robots** — a base is a power, thermal, and mass budget: solar or nuclear input, radiator area, ISRU throughput. Metals from ore, agriculture, and ascent-scale propellant live here: they are megawatt or months-long processes executed by robots, never by the player's hands. Worker bots do repetitive extraction and hauling; defender bots handle threats. Neither is meaningful until power/thermal/ISRU are modeled.
+- **Creatures and riding** — only exist on worlds whose pipeline actually produced a biosphere, which makes them rare and significant. Behavior and habitat follow from the world's climate and chemistry. Riding is a traversal option on those worlds.
+- **Subterranean domain** — real depth: geothermal gradient (~25 K/km on an Earth-like world), groundwater tables, lava tubes and caves as natural radiation shelter. Replaces the earlier "surface markers only" placeholder.
 
 ## Design Philosophy
 
-A few principles have guided every decision so far, worth stating explicitly so future additions stay consistent:
-
-- **Simplicity over completeness.** When faced with a choice between a richer system and a simpler one, simpler has consistently won (e.g., 4 survival stats instead of more, universal resource categories instead of true per-planet chemistry).
-- **Escalating, recoverable harm.** No mechanic in the game kills the player outright from neglect. Every stat gives a warning window. This keeps the system teachable even as content varies wildly.
-- **Prove the hardest thing first.** Rather than building broad and shallow, each milestone targets the single riskiest unknown (right now: can the scale transition actually feel seamless?) before adding scope on top of it.
-- **Universal systems, local flavor.** Rather than invent new mechanics per planet or per layer, the same small set of systems (4 stats, 8 scale levels) is reused everywhere, with only the content changing. This keeps the design buildable at a small team/solo scale despite the scope of the premise.
+- **Causality over rules.** Prefer one physical model that produces many outcomes over many tuned rules. If a behavior can be derived, do not author it.
+- **Lethal where physics is lethal, legible everywhere.** Instruments and symptoms give warning; outcomes are never softened. The player is expected to learn the world, not the rules.
+- **Prove the hardest thing first.** Each milestone targets the single riskiest unknown. Right now: a real-scale, physically continuous orbit-to-surface descent running on a phone.
+- **One model, every world.** The same equations run on every planet; only inputs change. This is what keeps a universe-scale premise buildable solo.
+- **Realism in numbers, plausibility in pixels.** Performance budget: mid-range phone, 30 fps floor, thermal-aware (sustained, not peak). Visual fidelity is spent only where it helps the player read the simulation.
 
 ## Current State of the Project
 
-- **Scale system:** Fully specified across all 8 levels (see game_spec.md), with a stage-0 cosmic web prototype already in progress (referenced as v0.3.2).
-- **Survival system:** Fully specified at the design level (all 4 stats defined with resource loops and risk mechanics). Not yet implemented.
-- **MVP in progress:** A narrow vertical slice proving the scale/zoom system works end-to-end, Lv1 through Lv7, with no survival mechanics and no procedural content. See game_spec.md for full MVP scope.
-- **Not started:** Procedural generation, building system, colonies, worker/warrior robots, creatures and riding, vehicles/aircraft/ships and other machines, combat, subterranean geometry, gear progression tiers.
+- **Scale system:** Redefined into Observable (Lv1–2) and Navigable (Lv3–8) groups. The stage-0 cosmic web prototype (v0.3.2) is retained as a Lv1–2 backdrop asset, no longer a traversable layer.
+- **Survival system:** The v1 four-stat design is superseded by the body model in Pillar 2. Detailed physiology spec not yet written.
+- **Planet generation:** Pipeline defined at the outline level (Pillar 3). Not implemented.
+- **Resources and extraction:** Defined in specs.md Section 7 — ten tracked substances, eight processes with energy costs, availability by archetype, two deliberate realism concessions. Not implemented.
+- **Machines:** Requirements defined (Pillar 4). Not designed in detail.
+- **Tech stack:** Deliberately undecided. The README commits to a performance budget, not an engine. A separate `tech.md` will hold that decision.
+- **Not started:** Everything below the design level.
 
 ## Roadmap Shape (High Level, Not Yet Scheduled)
 
-1. **Prove the scale system** — current MVP. No survival, no content, just seamless traversal.
-2. **Prove the survival loop** — a second, separate MVP: one hand-built planet, all 4 stats live, minimal tools. Proves the other core pillar in isolation.
-3. **Combine the two** — survival on a planet reached by actually flying down through the scale system, rather than a hand-placed test scene.
-4. **Introduce proceduralism** — planets generated rather than hand-built, resource "reskinning" logic applied.
-5. **Introduce building and robot-operated colonies** — the building system, worker bots for repetitive tasks, and warrior bots for defense, once the foundation is proven solid.
-6. **Introduce creatures and riding** — native creatures with believable habitats and behavior, tameable for traversal.
-7. **Introduce vehicles and machines** — ground vehicles, aircraft, ships, and colony-support machinery, extending traversal beyond walking on foot.
-8. **Subterranean domain** — real geometry below the surface, beyond the current placeholder markers.
+1. **Real-scale orbit → surface on a phone.** One star, one hand-tuned planet with a real atmosphere profile. Player-controlled descent and ascent with time-warp, continuous instrument readouts (altitude, velocity, pressure, temperature, heating) from one model. No loading, no pop-in, 30 fps floor on the reference device.
+2. **Body model and minimal replenishment on that planet.** Lethal physiology live, suit as the primary instrument, plus the smallest honest resource loop: melt ice, electrolyse water, swap scrubber canisters, run on lander solar. Food is carried only. Prove survival is legible without being softened, and that the loop is survival rather than just dying slowly.
+3. **Planet generation pipeline.** Physics-derived worlds; most dead. Each body emits a resource availability profile. Prove that generated inputs produce meaningfully different survival problems — that archetypes invert each other's bottlenecks.
+4. **Ships and transit.** Delta-v, propellant, consumables, time-warp travel between bodies in one system. Landing mass bounded by return propellant.
+5. **Ground and air vehicles.** Traversal that respects the local atmosphere and gravity.
+6. **Subterranean depth.** Geothermal, groundwater, caves as shelter.
+7. **Colonies and robots.** Power/thermal/ISRU budgets, then automation. Metals, agriculture and ascent-scale propellant arrive here, as robot work.
+8. **Creatures and riding.** Only on living worlds.
 
-This ordering is deliberate: each stage only adds one major unproven system at a time, so failures are easy to isolate.
+Each stage adds one major unproven system at a time, so failures are easy to isolate.
 
 ## Companion Documents
 
-- **game_spec.md** — detailed spec: full 8-level scale table, full survival system table, and the current MVP definition with pass/fail criteria.
+- **specs.md** — detailed spec (Draft v0.3). Matches this README; Section 7 holds the resource and extraction model.
+- **tech.md** (planned) — engine and tooling decision, driven by the mobile performance budget above.
 
-This README is the standing overview; game_spec.md is where implementation-level detail lives and will keep expanding as each system is worked out further.
+This README is the standing overview; specs.md is where implementation-level detail lives.
