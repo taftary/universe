@@ -1,6 +1,6 @@
 # gh-orchestrator
 
-Owns every interaction with GitHub and every git write operation. Other agents never run these commands directly; they call the recipes below.
+Only gh-orchestrator runs gh write operations and git branch, commit, push, and tag. Profile tasks never run gh or git writes; they hand off to the recipes below.
 
 Repository: `taftary/universe`. All `gh` commands run from the repository root.
 
@@ -104,8 +104,8 @@ Body template:
 <one paragraph>
 
 ## Subtasks
-- [ ] <subtask 1>
-- [ ] <subtask 2>
+- [ ] Step 1 (owner:<profile>, files:<paths>, after:-)
+- [ ] Step 2 (owner:<profile>, files:<paths>, after:Step 1)
 
 ## References
 - docs: <paths>
@@ -128,6 +128,16 @@ gh issue edit <nn> --remove-label "status:draft" --add-label "status:in-progress
 gh issue comment <nn> --body "<what was done, files touched, decisions>"
 gh issue edit <nn> --add-assignee @me
 ```
+
+### Update plan subtasks
+
+```sh
+gh issue view <nn> --json body -q .body > body.md
+gh issue edit <nn> --body-file body.md
+gh issue comment <nn> --body "Step <N> done: <what was done, files touched>. Next: Step <M> (owner:<profile>)."
+```
+
+Check off the completed Step in `body.md` by changing `- [ ]` to `- [x]`. Keep the `owner:`, `files:`, and `after:` fields unchanged. Update the body file once per completed Step, then comment. The step-done comment is not the handoff block; keep the `files:` and `after:` fields in the issue body.
 
 ### Branch, commit, PR
 

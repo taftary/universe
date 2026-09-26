@@ -36,7 +36,7 @@ Run the **Preflight** section of [gh-orchestrator.md](gh-orchestrator.md). It re
 
 ### 3. Delegate
 
-Hand off to [process-orchestrator.md](process-orchestrator.md) with this brief:
+Act as the sequencer. Hand off to [process-orchestrator.md](process-orchestrator.md) with this brief:
 
 ```
 type: <type:*>
@@ -46,12 +46,20 @@ request: <verbatim user request>
 context: <relevant issues #nn, relevant docs paths>
 ```
 
+Sequencer rules:
+
+- Spawn only depth-1 subagents. Pass `files:` and `after:` in each handoff. Never delegate sequencing.
+- Require a subtask plan where each line uses the format `- [ ] Step N (owner:<profile>, files:<paths>, after:<prior>)`.
+- Before each spawn, check the DAG: related means same issue or overlapping files. If related, wait for the prior step to finish.
+- Files versus gh split: profiles edit files only; [gh-orchestrator.md](gh-orchestrator.md) owns all `gh` and `git` write operations.
+
 ### 4. Close
 
 When process-orchestrator reports done, verify:
 
 - [ ] Issue exists, has `type:`, `status:`, `area:`, `agent:` labels and a milestone (tracking on).
 - [ ] Subtasks in the issue body are checked or moved to a follow-up issue.
+- [ ] Subtasks use the format `- [ ] Step N (owner:<profile>, files:<paths>, after:<prior>)` and `agent:` labels match the owners.
 - [ ] Documents mapped to the `area:` (see [../README.md](../README.md#issue-to-document-mapping)) are updated.
 - [ ] Commit(s) reference `#nn` and follow the commit recipe.
 - [ ] Issue status label is `status:done` and the issue is closed with a closing comment summarising what changed and where.
@@ -60,6 +68,6 @@ Report to the user: issue number, files touched, next suggested step.
 
 ## Constraints
 
-- Never skip step 2. Never call `git commit`, `git tag`, `git push` or `gh` write commands directly; only via gh-orchestrator recipes.
+- Never skip step 2. Never call `git commit`, `git tag`, `git push` or `gh` write commands directly; only via gh-orchestrator recipes. Profiles edit files only; gh-orchestrator owns `gh` and `git` writes.
 - One request, one issue. Split into sub-issues rather than one oversized issue.
-- If the request spans several `area:` labels with different profiles, let process-orchestrator sequence them; do not parallelise writes to the same file.
+- The orchestrator is the sequencer. Spawn only depth-1 subagents with explicit `files:` and `after:`; never delegate sequencing. Before each spawn check the DAG (related is same issue or overlapping files) and wait if related; do not parallelise writes to the same file.
