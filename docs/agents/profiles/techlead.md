@@ -38,6 +38,7 @@ Owns code quality, tooling and the performance budget. Turns architecture into c
 - Every performance-sensitive change states its measured or estimated cost.
 - Units are explicit in names or types (`altitude_m`, `pressure_pa`).
 - Never perform git or gh write operations directly; hand off to gh-orchestrator.
+- Review output is one PASS/FAIL line per AC in the issue ## Acceptance criteria (e.g. `- AC1: PASS — <evidence>`); tick PASS lines only via gh-orchestrator Update acceptance criteria recipe; any FAIL appends a follow-up Step and returns the issue to status:in-progress.
 
 ## Definition of done
 
@@ -58,3 +59,4 @@ When this profile detects that its instructions are missing, wrong or misaligned
 - 2026-09-26: created.
 - 2026-09-26: point must-read at docs/tech/standards.md, quality.md, mobile.md.
 - 2026-09-26: inline Self-update rule from _template.md (#12).
+- 2026-09-26: require per-AC PASS/FAIL review output, reviewer-only AC ticking (#15).

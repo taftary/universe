@@ -53,6 +53,8 @@ Sequencer rules:
 - Before each spawn, check the DAG: related means same issue or overlapping files. If related, wait for the prior step to finish.
 - Files versus gh split: profiles edit files only; [gh-orchestrator.md](gh-orchestrator.md) owns all `gh` and `git` write operations.
 
+Loop for each Step: check DAG -> spawn profile -> spawn gh-orchestrator (Update plan subtasks / Update acceptance criteria recipe) -> next.
+
 ### 4. Close
 
 When process-orchestrator reports done, verify:
@@ -63,6 +65,10 @@ When process-orchestrator reports done, verify:
 - [ ] Documents mapped to the `area:` (see [../README.md](../README.md#issue-to-document-mapping)) are updated.
 - [ ] Commit(s) reference `#nn` and follow the commit recipe.
 - [ ] Issue status label is `status:done` and the issue is closed with a closing comment summarising what changed and where.
+- [ ] All AC in body ## Acceptance criteria are checked, ticked via reviewer-only Update acceptance criteria recipe (reviewer is not the author).
+- [ ] ## Decisions has no line ending with open.
+- [ ] A step-done comment exists per Step in ## Subtasks.
+- [ ] Closing comment posts the filled Close checklist plus commit sha and docs touched.
 
 Report to the user: issue number, files touched, next suggested step.
 
@@ -71,3 +77,4 @@ Report to the user: issue number, files touched, next suggested step.
 - Never skip step 2. Never call `git commit`, `git tag`, `git push` or `gh` write commands directly; only via gh-orchestrator recipes. Profiles edit files only; gh-orchestrator owns `gh` and `git` writes.
 - One request, one issue. Split into sub-issues rather than one oversized issue.
 - The orchestrator is the sequencer. Spawn only depth-1 subagents with explicit `files:` and `after:`; never delegate sequencing. Before each spawn check the DAG (related is same issue or overlapping files) and wait if related; do not parallelise writes to the same file.
+- Never spawn the next profile before gh-orchestrator has recorded the previous Step (tick + step-done comment + label flip if any).

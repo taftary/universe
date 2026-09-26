@@ -107,6 +107,16 @@ Body template:
 - [ ] Step 1 (owner:<profile>, files:<paths>, after:-)
 - [ ] Step 2 (owner:<profile>, files:<paths>, after:Step 1)
 
+## Acceptance criteria
+- [ ] AC1: <criterion>
+
+One line per criterion; tick only via the Update acceptance criteria recipe by the reviewer.
+
+## Decisions
+- Q: <open question> -> A: <decision> (by:<profile|user>)
+
+Plan resolves all open Q before status:in-progress; any unresolved Q moves the issue to status:blocked.
+
 ## References
 - docs: <paths>
 - related: #<nn>
@@ -137,7 +147,19 @@ gh issue edit <nn> --body-file body.md
 gh issue comment <nn> --body "Step <N> done: <what was done, files touched>. Next: Step <M> (owner:<profile>)."
 ```
 
-Check off the completed Step in `body.md` by changing `- [ ]` to `- [x]`. Keep the `owner:`, `files:`, and `after:` fields unchanged. Update the body file once per completed Step, then comment. The step-done comment is not the handoff block; keep the `files:` and `after:` fields in the issue body.
+Run this after EVERY completed Step before spawning the next profile; do not batch multiple Steps into one update.
+
+Check off the completed Step in `body.md` by changing `- [ ]` to `- [x]`. Keep the `owner:`, `files:`, and `after:` fields unchanged. Update the body file once per completed Step, then comment. The step-done comment is not the handoff block; keep the `files:` and `after:` fields in the issue body. The step-done comment is a pointer only; Subtasks, Acceptance criteria, and Decisions live in the issue body.
+
+### Update acceptance criteria
+
+```sh
+gh issue view <nn> --json body -q .body > body.md
+gh issue edit <nn> --body-file body.md
+gh issue comment <nn> --body "Review: AC1 PASS (<evidence>), AC2 FAIL (<gap>). Next: Step <N+1> (owner:<lead>)."
+```
+
+Tick `- [ ] ACn` to `- [x]` in `body.md` only from the reviewer's per-AC PASS list in the review comment; never from the author claim. For each FAIL, append `- [ ] Step N+1 (owner:<lead>, files:<paths>, after:Step N)` under `## Subtasks`, flip the label back with `gh issue edit <nn> --remove-label "status:review" --add-label "status:in-progress"`, and re-review after the fix.
 
 ### Branch, commit, PR
 
@@ -156,6 +178,8 @@ gh pr merge --squash --delete-branch
 gh issue edit <nn> --remove-label "status:in-progress" --add-label "status:done"
 gh issue close <nn> --comment "Done in <commit-sha or PR>. Docs updated: <paths>."
 ```
+
+The closing comment must post the filled Close checklist: all Acceptance criteria ticked by a non-author reviewer; no open Decisions; one step-done comment per Step; commit sha and docs touched listed.
 
 ### Tag and release
 

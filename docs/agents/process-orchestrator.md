@@ -37,13 +37,21 @@ Every profile follows this order. Skip a step only if the brief's `type` makes i
 | Step | Who | Output | Issue status |
 | --- | --- | --- | --- |
 | 1. Draft | lead | one-paragraph goal + open questions, in the issue body | `status:draft` |
-| 2. Plan | lead + support | subtask checklist, acceptance criteria, docs to update | `status:planned` |
+| 2. Plan | lead + support | subtask checklist, acceptance criteria, Decisions, docs to update — all in issue body | `status:planned` |
 | 3. Implement | lead (or dev when code) | artefacts changed | `status:in-progress` |
-| 4. Review / test | tester or techlead (never the author) | review comment on the issue, checks pass | `status:review` |
+| 4. Review / test | tester or techlead (never the author) | review comment with one PASS/FAIL line per AC, checks pass | `status:review` |
 | 5. Docs | lead | documents mapped to `area:` updated | `status:review` |
 | 6. Close | orchestrator via gh-orchestrator | closing comment, commit references `#nn` | `status:done` |
 
 With `tracking: off` the same steps run but outputs are reported to the user instead of written to an issue, and no git write operations occur.
+
+## Progress cadence
+
+Each step boundary follows this order: profile returns -> gh-orchestrator ticks the Step, posts the step-done comment, flips the status label if it changes -> then the next profile is spawned. Batching step updates is forbidden.
+
+- Step 2 (Plan) writes acceptance criteria into the body `## Acceptance criteria` and resolves open questions into `## Decisions`. Any question still open means `status:blocked` (no `status:in-progress` with open questions).
+- Step 4 (Review) output is one PASS/FAIL line per AC; the reviewer ticks passing ones via the Update acceptance criteria recipe; any FAIL adds a follow-up Step and returns to `status:in-progress`.
+- The plan comment is a pointer only; the body is single source of truth.
 
 ## Depth-1 execution
 
@@ -65,6 +73,8 @@ The plan must live in issue subtasks. Step 2 of the standard sequence writes one
 
 Use `after:-` when there is no prior step.
 
+`## Acceptance criteria` (`- [ ] ACn ...`) and `## Decisions` (`- Q: ... -> A: ... (by:...)`) live alongside `## Subtasks` in the body.
+
 ## Handoff brief
 
 When passing work between profiles, use this block so context is never lost:
@@ -84,7 +94,7 @@ Handoff note: implementation briefs cite `docs/tech/standards.md` for layout, li
 
 ## Blocked
 
-If a profile cannot proceed (missing decision, missing data, conflicting docs): set `status:blocked`, comment the blocker on the issue, and return to the orchestrator with the question for the user.
+If a profile cannot proceed (missing decision, missing data, conflicting docs, open Decision at end of Plan): set `status:blocked`, comment the blocker on the issue, and return to the orchestrator with the question for the user.
 
 ## Retroactivity
 
@@ -104,3 +114,4 @@ If a request keeps landing on the wrong profile, or a needed profile does not ex
 - 2026-09-26: add tech-stack routing row and standards.md handoff note.
 - 2026-09-26: all 14 profiles invocable via adapters in .opencode/agent/ and .claude/agents/; lifecycle table added to README; retroactivity rule added (#9).
 - 2026-09-26: define depth-1 execution, DAG wait rule, files-vs-gh split, and issue subtask plan format (#10); fix sequencer wording per #10 audit.
+- 2026-09-26: enforce per-step gh-orchestrator cadence, body AC+Decisions sections, per-AC review verdicts with FAIL->follow-up Step (#15).

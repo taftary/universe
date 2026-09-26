@@ -28,18 +28,18 @@ GLOBAL AGENT (AGENTS.md) -- question? --> answer directly, stop
 
 Single state machine for every tracked request. The sequencer is [orchestrator.md](orchestrator.md); recipes are in [gh-orchestrator.md](gh-orchestrator.md). The handoff block from [process-orchestrator.md](process-orchestrator.md#handoff-brief) is mandatory between profiles.
 
-Plan and DAG: the plan lives in issue subtasks, one line per step as `- [ ] Step N (owner:<profile>, files:<paths>, after:<prior>)`. Steps carry `files:` and `after:`; related steps (same issue or overlapping files) run sequentially and the later step waits, disjoint steps may run in parallel. Files versus gh split: profile tasks edit files only; all `gh` and `git` writes go through [gh-orchestrator.md](gh-orchestrator.md).
+Plan and DAG: the plan lives in issue subtasks, one line per step as `- [ ] Step N (owner:<profile>, files:<paths>, after:<prior>)`. Steps carry `files:` and `after:`; related steps (same issue or overlapping files) run sequentially and the later step waits, disjoint steps may run in parallel. Files versus gh split: profile tasks edit files only; all `gh` and `git` writes go through [gh-orchestrator.md](gh-orchestrator.md). ## Acceptance criteria (`- [ ] ACn`) and ## Decisions (`- Q: ... -> A: ... (by:...)`) live in the body alongside subtasks.
 
-| Step | Profile | gh recipe | Status in | Status out | Agent label add |
-| --- | --- | --- | --- | --- | --- |
-| 1. Draft | lead | Create an issue | none | `status:draft` | `agent:<lead>` at create |
-| 2. Plan | lead + support | Update status (plan comment) | `status:draft` | `status:planned` | `agent:<support>` when different from lead |
-| 3. Implement | lead (or dev when code) | Branch, commit, PR | `status:planned` | `status:in-progress` | none |
-| 4. Review / test | tester or techlead, never the author | Update status (review comment) | `status:in-progress` | `status:review` | `agent:<reviewer>` before the status change |
-| 5. Docs | lead | Update status (docs comment) | `status:review` | `status:review` | none |
-| 6. Close | orchestrator via gh-orchestrator | Close | `status:review` | `status:done` | none |
+| Step | Profile | gh recipe | Status in | Status out | Agent label add | Body section written |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1. Draft | lead | Create an issue | none | `status:draft` | `agent:<lead>` at create | ## Goal |
+| 2. Plan | lead + support | Update status (plan comment) | `status:draft` | `status:planned` | `agent:<support>` when different from lead | ## Subtasks + ## Acceptance criteria + ## Decisions |
+| 3. Implement | lead (or dev when code) | Branch, commit, PR | `status:planned` | `status:in-progress` | none | — (steps ticked per-step) |
+| 4. Review / test | tester or techlead, never the author | Update status (review comment) | `status:in-progress` | `status:review` | `agent:<reviewer>` before the status change | ## Acceptance criteria ticked (reviewer-only) |
+| 5. Docs | lead | Update status (docs comment) | `status:review` | `status:review` | none | — (area docs updated) |
+| 6. Close | orchestrator via gh-orchestrator | Close | `status:review` | `status:done` | none | closing checklist posted |
 
-Rules: reviewer is never the author; the reviewer `agent:` label is added before `status:review`; `status:blocked` may interrupt any step with a blocker comment.
+Rules: reviewer is never the author; the reviewer `agent:` label is added before `status:review`; `status:blocked` may interrupt any step with a blocker comment. Cadence: gh-orchestrator records after EVERY Step before the next spawn (no batching); only the reviewer ticks AC; plan comment is a pointer, body is source of truth.
 
 ## Adapters
 
