@@ -64,6 +64,14 @@ Handoff note: implementation briefs cite `docs/tech/standards.md` for layout, li
 
 If a profile cannot proceed (missing decision, missing data, conflicting docs): set `status:blocked`, comment the blocker on the issue, and return to the orchestrator with the question for the user.
 
+## Retroactivity
+
+Process changes apply forward only:
+
+- Closed issues stay as-is; their history is not rewritten (e.g. #1-#7 closed before profile adapters existed).
+- Reopening a closed issue re-routes it with the current routing table above.
+- Work done before a process change is documented once, in the next issue comment or changelog, not re-applied retroactively.
+
 ## Self-update
 
 If a request keeps landing on the wrong profile, or a needed profile does not exist, update the routing table above and, if needed, create the profile from [profiles/_template.md](profiles/_template.md). Record the change in the Changelog below.
@@ -72,3 +80,4 @@ If a request keeps landing on the wrong profile, or a needed profile does not ex
 
 - 2026-09-26: created.
 - 2026-09-26: add tech-stack routing row and standards.md handoff note.
+- 2026-09-26: all 14 profiles invocable via adapters in .opencode/agent/ and .claude/agents/; lifecycle table added to README; retroactivity rule added (#9).

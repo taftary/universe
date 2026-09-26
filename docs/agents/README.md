@@ -21,6 +21,25 @@ orchestrator.md
   '-- 4. close : issue updated, docs synced, commit references #nn
 ```
 
+## Lifecycle
+
+Single state machine for every tracked request. Recipes are in [gh-orchestrator.md](gh-orchestrator.md). The handoff block from [process-orchestrator.md](process-orchestrator.md#handoff-brief) is mandatory between profiles.
+
+| Step | Profile | gh recipe | Status in | Status out | Agent label add |
+| --- | --- | --- | --- | --- | --- |
+| 1. Draft | lead | Create an issue | none | `status:draft` | `agent:<lead>` at create |
+| 2. Plan | lead + support | Update status (plan comment) | `status:draft` | `status:planned` | `agent:<support>` when different from lead |
+| 3. Implement | lead (or dev when code) | Branch, commit, PR | `status:planned` | `status:in-progress` | none |
+| 4. Review / test | tester or techlead, never the author | Update status (review comment) | `status:in-progress` | `status:review` | `agent:<reviewer>` before the status change |
+| 5. Docs | lead | Update status (docs comment) | `status:review` | `status:review` | none |
+| 6. Close | orchestrator via gh-orchestrator | Close | `status:review` | `status:done` | none |
+
+Rules: reviewer is never the author; the reviewer `agent:` label is added before `status:review`; `status:blocked` may interrupt any step with a blocker comment.
+
+## Adapters
+
+Every profile in [profiles/](profiles/) is invocable through a one-file adapter in both `.opencode/agent/<name>.md` and `.claude/agents/<name>.md`. Each adapter only points to its profile file, which stays the source of truth. The three orchestrators (`orchestrator`, `gh-orchestrator`, `process-orchestrator`) have adapters in the same two directories.
+
 ## Files
 
 | File | Role |
