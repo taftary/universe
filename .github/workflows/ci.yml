@@ -1,0 +1,68 @@
+# CI gates: single source of truth is `docs/tech/quality.md`. Steps run in
+# the order listed there; any failure blocks merge.
+#
+# Mobile checks (`android`, `ios`) cover the `engine` and `game` libraries:
+# host-only binaries (`debug`, `tools`) never ship to phones.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: cargo build --workspace
+      - run: cargo build -p universe-debug --features dev-shell
+      - run: cargo test --workspace
+      - run: cargo test --workspace --test smoke
+      - name: unsafe boundary grep gate
+        run: |
+          matches=$(grep -rn --include='*.rs' 'unsafe' crates/game crates/debug crates/tools tests src | grep -v 'forbid(unsafe_code)' || true)
+          if [ -n "$matches" ]; then echo "$matches"; exit 1; fi
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check -p universe-engine -p universe-game --target aarch64-linux-android
+
+  ios:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check -p universe-engine -p universe-game --target aarch64-apple-ios
+
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95
+      - uses: Swatinem/rust-cache@v2
+      # Verifies the max-MSRV rule in `docs/tech/stack.md`: the workspace
+      # `rust-version` floor (1.95 via egui 0.36.2) must still build.
+      - run: cargo check --workspace

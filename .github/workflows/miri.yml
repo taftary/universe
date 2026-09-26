@@ -1,0 +1,29 @@
+# Miri gate (`docs/tech/quality.md`): runs on `engine` when `unsafe` blocks
+# or FFI-adjacent code change. Scaffold engine has no `unsafe`; this workflow
+# exists so the gate is wired before the first `unsafe` lands.
+
+name: miri
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/engine/**"
+  pull_request:
+    paths:
+      - "crates/engine/**"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  miri-engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo +nightly miri test -p universe-engine

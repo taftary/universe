@@ -1,0 +1,35 @@
+# Supply-chain gates (`docs/tech/quality.md`): audit, deny, and hack run
+# daily and on any lockfile, manifest, or deny-config change.
+
+name: supply-chain
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Cargo.lock"
+      - "**/Cargo.toml"
+      - "deny.toml"
+  pull_request:
+    paths:
+      - "Cargo.lock"
+      - "**/Cargo.toml"
+      - "deny.toml"
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  audit-deny-hack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install --locked cargo-audit cargo-deny cargo-hack
+      - run: cargo audit
+      - run: cargo deny check
+      - run: cargo hack check --workspace --feature-powerset
