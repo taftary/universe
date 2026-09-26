@@ -18,8 +18,9 @@
 | rand_core | 0.10.1 proposed lock (verified 2026-09-26) | PRNG core traits (`TryRng`, `Rng`, `SeedableRng`) for the injected project PRNG (D-013). | Default features. |
 | rand_xoshiro | 0.8.1 proposed lock (verified 2026-09-26) | Project PRNG xoshiro256** implementation with SplitMix64 seeding; paired with `rand_core` (D-013). | Default features. |
 | xxhash-rust | 0.8.18 proposed lock (verified 2026-09-26) | Snapshot hash xxh3-64 for golden-hash tests (D-014). | `xxh3` feature only. |
+| bytemuck | 1.25.2 locked (verified 2026-09-27 via Cargo.lock) | Pod transport for dev-shell SimSnapshot (D-022). | `derive` feature only. |
 
-Companions locked at scaffold: `thiserror` 2.0.21, `anyhow` 1.0.104, `tracing` 0.1.44 (`attributes` for instrument macros), `mimalloc` 0.1.52 (global allocator in binaries). Still to be locked at first use (no guess recorded here): `egui-wgpu`, `tracing-tracy`, `criterion`, `postcard` (save default candidate), `bytemuck` (`Pod` on render-side structs; see [simulation.md](simulation.md)).
+Companions locked at scaffold: `thiserror` 2.0.21, `anyhow` 1.0.104, `tracing` 0.1.44 (`attributes` for instrument macros), `mimalloc` 0.1.52 (global allocator in binaries). Still to be locked at first use (no guess recorded here): `egui-wgpu`, `tracing-tracy`, `criterion`, `postcard` (save default candidate).
 
 If a version cannot be verified at scaffold time, write `to be locked at scaffold` in `Cargo.toml` comments instead of guessing.
 

@@ -13,6 +13,8 @@ pub mod body;
 pub mod error;
 pub mod generation;
 pub mod hash;
+#[cfg(feature = "dev-shell")]
+pub mod inspect;
 pub mod orbit;
 pub mod platform;
 pub mod regime;

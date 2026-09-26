@@ -19,6 +19,8 @@ Boundaries between levels are handoffs in the simulation, not scene changes. Eve
 
 Orbital mechanics on levels 3-5 are Keplerian two-body arcs with patched-conics handoffs at sphere-of-influence boundaries. Coasting orbits propagate analytically (on rails under warp per [Global Conventions](../specs.md#2-global-conventions)); the dominant center is selected by Newtonian acceleration with Laplace sphere-of-influence radii. Burn execution (prograde and retrograde maneuvers) is trajectory scope, not part of the coasting model.
 
+M1 note: `SimSnapshot` (#32) carries the active frame path (frame level, depth, body ids) as read-only dev-shell transport; it observes Lv3-Lv7 handoffs and changes no level, extent, or handoff rule above.
+
 Reference gravitational parameters in cubic meters per square second and semi-major axes in meters for hand-placed bodies and tests. This table is the only copy of these values in `docs/topics/`; `mvp.md` points here and does not duplicate them.
 
 | Body | Parameter | Value |

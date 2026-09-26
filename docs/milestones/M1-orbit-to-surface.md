@@ -1,6 +1,6 @@
 # M1 Orbit to Surface
 
-GitHub milestone 2. Open. Delivered so far: #14, #20, #22, #23, #26.
+GitHub milestone 2. Open. Delivered so far: #14, #20, #22, #23, #26, #32.
 
 ## Goal
 
@@ -17,6 +17,7 @@ GitHub milestone 2. Open. Delivered so far: #14, #20, #22, #23, #26.
 - #22 Reference planet and atmosphere (closed)
 - #23 Orbits and warp (closed)
 - #26 Trajectory, surface, and handoffs (closed)
+- #32 SimSnapshot and golden test (closed)
 
 ## Plan
 

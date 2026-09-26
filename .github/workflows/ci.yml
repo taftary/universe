@@ -30,6 +30,7 @@ jobs:
       - run: cargo build -p universe-debug --features dev-shell
       - run: cargo test --workspace
       - run: cargo test --workspace --test smoke
+      - run: cargo test --workspace --test smoke --all-features
       - name: unsafe boundary grep gate
         run: |
           matches=$(grep -rn --include='*.rs' 'unsafe' crates/game crates/debug crates/tools tests src | grep -v 'forbid(unsafe_code)' || true)
