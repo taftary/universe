@@ -61,15 +61,15 @@ Single user project `universe` (milestone `M0`, repo `taftary/universe`). It mir
 
 | Key | Placeholder | Filled value |
 | --- | --- | --- |
-| Project number | `<P>` |  |
-| Project node id | `<PROJECT_ID>` |  |
-| Status field id | `<STATUS_FIELD_ID>` |  |
-| Option Draft | `<OPTION_ID_DRAFT>` |  |
-| Option Planned | `<OPTION_ID_PLANNED>` |  |
-| Option In progress | `<OPTION_ID_IN_PROGRESS>` |  |
-| Option Review | `<OPTION_ID_REVIEW>` |  |
-| Option Blocked | `<OPTION_ID_BLOCKED>` |  |
-| Option Done | `<OPTION_ID_DONE>` |  |
+| Project number | `<P>` | 1 |
+| Project node id | `<PROJECT_ID>` | PVT_kwHOCpw4Tc4BkyPg |
+| Status field id | `<STATUS_FIELD_ID>` | PVTSSF_lAHOCpw4Tc4BkyPgzhjhj7Q |
+| Option Draft | `<OPTION_ID_DRAFT>` | 416b1a11 |
+| Option Planned | `<OPTION_ID_PLANNED>` | f5f8ddc9 |
+| Option In progress | `<OPTION_ID_IN_PROGRESS>` | e7851b1d |
+| Option Review | `<OPTION_ID_REVIEW>` | ee7126f1 |
+| Option Blocked | `<OPTION_ID_BLOCKED>` | e13e43ca |
+| Option Done | `<OPTION_ID_DONE>` | 464eb338 |
 
 ### Branches and commits
 
