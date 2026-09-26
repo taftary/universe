@@ -49,6 +49,19 @@ Eight canonical levels in two groups. Observable levels are seen and navigated b
 
 Boundaries between levels are handoffs in the simulation, not scene changes. Every readout must be continuous across every boundary in both directions.
 
+Orbital mechanics on levels 3-5 are Keplerian two-body arcs with patched-conics handoffs at sphere-of-influence boundaries. Coasting orbits propagate analytically (on rails under warp per Section 2); the dominant center is selected by Newtonian acceleration with Laplace sphere-of-influence radii. Burn execution (prograde and retrograde maneuvers) is trajectory scope after coasting and warp, not part of the coasting model.
+
+Reference gravitational parameters in cubic meters per square second and semi-major axes in meters for hand-placed bodies and tests:
+
+| Body | Parameter | Value |
+| --- | --- | --- |
+| Sun | `MU_SUN` | 1.32712440018e20 m3/s2 |
+| Earth | `MU_EARTH` | 3.986004418e14 m3/s2 |
+| Mars | `MU_MARS` | 4.282837e13 m3/s2 |
+| Earth orbit | semi-major axis `a` | 1.495978707e11 m, e 0.0167 |
+| Moon orbit | semi-major axis `a` | 3.84399e8 m |
+| Mars orbit | semi-major axis `a` | 2.279392e11 m |
+
 ## 4. Physiology
 
 Replaces the v0.1 four-stat survival system. The player manages what a real person in a real suit manages. For each system below: what is tracked, what moves it, what the player perceives, and how it ends if ignored.
@@ -228,7 +241,7 @@ Everything is hand-placed from published reference data. There is no generation.
 - One star, as a point with real mass.
 - One planet, Mars-like: real radius, mass, surface gravity, rotation, and a thin carbon-dioxide atmosphere with a reference pressure and temperature profile by altitude. Chosen because reference data is abundant and unambiguous; swappable for another archetype without changing the MVP's structure. Locked anchors and profile per D-015/D-016; constants and reference values are in 8.4.
 - No moons, no other bodies.
-- Player controls a point-ship: prograde and retrograde burns, time-warp from 1x to 10,000x under the Section 2 rules, atmospheric entry, descent to the surface grid, landing, ascent back to a stable orbit. The Section 6 ship trajectory uses the same body gravity `g(z)` as the atmosphere pressure integration, so orbit and atmosphere share one gravity field.
+- Player controls a point-ship: prograde and retrograde burns, time-warp from 1x to 10,000x under the Section 2 rules, atmospheric entry, descent to the surface grid, landing, ascent back to a stable orbit. The Section 6 ship trajectory uses the same body gravity `g(z)` as the atmosphere pressure integration, so orbit and atmosphere share one gravity field. Orbit coasting and warp ship first; burn execution is trajectory scope after coasting and warp.
 
 ### 8.4 Required Readouts
 
@@ -259,6 +272,21 @@ Reference model (D-015/D-016). Analytic hydrostatic profile anchored on the NASA
 
 Reference values from the locked profile: 610 Pa / 210 K at the surface; 224.4 Pa within 5 percent at one scale height (10695 m); about 2.6 Pa at 50 km; about 0.005 Pa at 100 km; exactly 0 at 120 km. Profile is `C0`-continuous on 0-120000 m with monotonic pressure and density.
 
+Reference orbit model (D-017/D-018). Coasting orbits use classical Keplerian elements with analytic propagation on rails under warp; patched-conics handoffs use Laplace sphere-of-influence radii. Burns are trajectory scope after coasting and warp, not part of the coasting model.
+
+| Constant | Value | Source |
+| --- | --- | --- |
+| Kepler solver | Newton-Raphson on E, `KEPLER_TOL_RAD` 1e-12 rad, `KEPLER_MAX_ITERATIONS` 50 | D-017 |
+| Element set | Classical a/e/i/Omega/omega/M0 plus epoch `Seconds` and `Mu` | D-018 |
+| Warp ladder | X1/X10/X100/X1000/X10000, `MAX_WARP_FACTOR` 10000.0 | D-018 |
+| SOI exponent | 0.4 for `a (m / M)^(2/5)` | D-018 |
+| `MU_SUN` | 1.32712440018e20 m3/s2 | Reference value for tests |
+| `MU_EARTH` | 3.986004418e14 m3/s2 | Reference value for tests |
+| `MU_MARS` | 4.282837e13 m3/s2 | Reference value for tests |
+| Earth orbit `a` | 1.495978707e11 m, e 0.0167 | Reference value for tests |
+| Moon orbit `a` | 3.84399e8 m | Reference value for tests |
+| Mars orbit `a` | 2.279392e11 m | Reference value for tests |
+
 ### 8.5 Explicitly Cut
 
 Rendering of any kind; generation; physiology and the suit; terrain tiles; weather; moons; additional bodies; ship mass or propellant budget (the point-ship has unlimited delta-v for this test).
@@ -267,7 +295,7 @@ Rendering of any kind; generation; physiology and the suit; terrain tiles; weath
 
 - No discontinuity in any readout at the orbit ↔ atmosphere ↔ surface handoffs, in either direction.
 - The player can reverse direction at any moment without breaking simulation state.
-- Warp rules honored: automatic drop to 1x on entry and approach.
+- Warp rules honored: automatic drop to 1x on entry, approach, and alarm.
 - 30 fps floor on the reference phone with the full simulation running at every warp factor.
 
 ### 8.7 Pass/Fail

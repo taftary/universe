@@ -15,7 +15,7 @@ From [../README.md](../README.md) and [specs.md](specs.md) section 2. These are 
 
 ## Decisions
 
-Decisions D-001..D-008 were confirmed on 2026-09-26; D-012..D-014 were locked on 2026-09-26 for #20; D-015..D-016 were locked on 2026-09-26 for #22. Wording below is verbatim. Each links to its tracking issue.
+Decisions D-001..D-008 were confirmed on 2026-09-26; D-012..D-014 were locked on 2026-09-26 for #20; D-015..D-016 were locked on 2026-09-26 for #22; D-017..D-018 were locked on 2026-09-26 for #23. Wording below is verbatim. Each links to its tracking issue.
 
 | ID | Decision (verbatim) | Issue | Rationale |
 | --- | --- | --- | --- |
@@ -32,6 +32,8 @@ Decisions D-001..D-008 were confirmed on 2026-09-26; D-012..D-014 were locked on
 | D-014 | Snapshot hash xxh3-64 via xxhash-rust for golden-hash tests. | #20 | Fast non-cryptographic 64-bit hash gives cross-platform state comparison without saving procedural content; policy in [tech/quality.md](tech/quality.md). |
 | D-015 | NASA Mars Fact Sheet anchor (p0 610 Pa, T0 210 K, R 3389500 m, g0 3.71 m/s2, M 6.4171e23 kg), analytic hydrostatic profile, MCD validation envelope only. | #22 | Hand-tuned Mars-like reference planet anchors the M1 descent path in [specs.md](specs.md) section 8; Mars Climate Database is a validation envelope, not an input; detail in [tech/simulation.md](tech/simulation.md). |
 | D-016 | Analytic 2-segment T(z) (T0+L1*z to 50 km, 150 K above), altitude-dependent g(z)=g0*(R/(R+z))^2, cutoff 120 km with 100-120 km taper, C0-exact. | #22 | Two-segment temperature with altitude-dependent gravity and a tapered vacuum handoff keeps every readout continuous across the orbit to surface path; detail in [tech/simulation.md](tech/simulation.md). |
+| D-017 | Newton-Raphson on E, E0=M for e<0.8 else PI, KEPLER_TOL_RAD 1e-12, KEPLER_MAX_ITER 50, M normalized, e<1e-8 circular guard, MVP 0<=e<1, typed errors, transcendentals via libm crate only. | #23 | Deterministic Kepler coast with named tolerance and cap keeps warp on rails; detail in [tech/simulation.md](tech/simulation.md). |
+| D-018 | Classical Keplerian a/e/i/Omega/omega/M0 + epoch Seconds + mu, mission-elapsed Seconds, Warp enum X1/X10/X100/X1000/X10000 with MAX_WARP_FACTOR 10000.0, SOI owned by orbit.rs, per-tick propagate/advance/request_warp interface. | #23 | Classical elements with unit-typed epoch plus the enum warp ladder encode [specs.md](specs.md) sections 2 and 8; detail in [tech/simulation.md](tech/simulation.md). |
 
 ### Candidate decisions for #14 (design, not locked)
 
