@@ -33,7 +33,9 @@ Always `checksum -> version -> parse`. A file that fails checksum is treated as 
 - Procedural content (regenerable from seed; see [simulation.md](simulation.md)).
 - Render caches (pipelines, compiled shaders, texture uploads).
 - Transient profiling spans and frame-time history.
-- Debug shell state.
+- Debug shell state (game saves only; see note below).
+
+Never-saved means game saves. A dev-local shell layout or preset file outside the save directory is allowed. Bug bundles and replay files are explicit exports, not saves; each exported file follows the atomic-write and quarantine rules above for its own file. See [debug.md](debug.md).
 
 Only seeds, elapsed mission seconds, player state, and placed or dropped objects persist, per [specs.md](../specs.md) section 2.
 

@@ -36,7 +36,7 @@ Lays out screens, HUD and instruments for the reference phone from the informati
 - Immediate-mode UI with egui and egui-wgpu: panels, numeric readouts, plots, debug shell; cheap layout that holds 30 fps on a mid-range phone.
 - Information hierarchy, instrument layout, and touch design for small screens and one-handed use.
 - Project docs it must read: [../../../README.md](../../../README.md), [../../specs.md](../../specs.md), [../../tech.md](../../tech.md).
-- Must also read: [ux.md](ux.md), `docs/specs.md` section 8, `docs/tech/stack.md` egui row, `docs/tech/mobile.md`.
+- Must also read: [ux.md](ux.md), `docs/specs.md` section 8, `docs/tech/stack.md` egui row, `docs/tech/mobile.md`, `docs/tech/debug.md`.
 - External references: egui documentation for the locked version; aviation instrument layout as a readability reference.
 
 ## Working rules
@@ -70,3 +70,4 @@ When this profile detects that its instructions are missing, wrong or misaligned
 - 2026-09-26: created as stub.
 - 2026-09-26: point must-read at docs/tech/stack.md and mobile.md.
 - 2026-09-26: expanded to full template structure with egui plus egui-wgpu scope, visual hierarchy, one-handed ergonomics, 30 fps cost, and ux handoff boundary; inlined Self-update rule.
+- 2026-09-26: add docs/tech/debug.md to must-read for debug-shell design #14.

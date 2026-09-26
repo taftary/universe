@@ -20,7 +20,8 @@ All crates share `[workspace.dependencies]` and `[workspace.lints]`. Full lint b
 - `engine::sim` is headless-testable. It depends only on `glam`, unit types, and the project PRNG. No `winit`, no `wgpu`, no `egui`, no file IO.
 - `engine::generation` is pure and deterministic. Same seed yields same inputs to sim. No wall clock, no thread-dependent order. Procedural content is never saved; see [simulation.md](simulation.md) and [persistence.md](persistence.md). (Named `generation`, not `gen`: `gen` is a reserved keyword under the edition 2024 locked in D-001.)
 - `game` has no GPU code. It wires sim, gen, and instruments. Any draw call outside `engine::render` or `debug` is a bug.
-- `debug` never leaks into release. It is a non-default workspace member (binary); it is not built unless requested and is excluded from release builds. Instruments shown to players live in `game` via `egui`; the debug shell lives in `debug`.
+- `engine::inspect` is dev-shell-gated behind the `dev-shell` feature and exposes plain-data `SimSnapshot` only (tick count, elapsed time, seed, warp factor, frame path, readouts with units, pick results, per-tick hash). It holds no `hecs` types, no f32 sim inputs, and no IO handles; the single f64-to-f32 conversion stays in `engine::render`. See [debug.md](debug.md) section 8.
+- `debug` (binary `universe-debug`) hosts the game view plus the shell in dev only. It builds for desktop and for Android/iOS in dev and is a non-default workspace member excluded from release builds. Instruments shown to players live in `game` via `egui`; the debug shell lives in `debug` and never leaks into release.
 - Platform code sits behind traits in `engine`. Callers use `PlatformClock`, `PlatformFs`, `PlatformThermal` traits. Concrete implementations are injected; tests inject fakes.
 - `tools` may use a `test-internals` style feature to reach `engine` internals. That feature is never enabled in `game` or `debug` release builds.
 

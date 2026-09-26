@@ -28,6 +28,16 @@ Decisions D-001..D-008 were confirmed on 2026-09-26. Wording below is verbatim. 
 | D-007 | Errors: thiserror enums per library crate, anyhow only in binaries, panics only on contract violations. | #1, #2 | Library errors are typed; application errors are ad hoc; full rule in [tech/standards.md](tech/standards.md). |
 | D-008 | Logging/profiling: tracing + Tracy (tracing-tracy) in dev, criterion benchmarks. | #1, #2 | Structured spans from day one; continuous profiling on the reference device; gates in [tech/quality.md](tech/quality.md). |
 
+### Candidate decisions for #14 (design, not locked)
+
+Proposed in [tech/debug.md](tech/debug.md) for issue #14. Each locks at first use per dependency hygiene in [tech/standards.md](tech/standards.md).
+
+| ID | Candidate decision | Issue | Rationale |
+| --- | --- | --- | --- |
+| D-009 | Debug render bridge: egui-wgpu paired with egui 0.36.2, locked at first use. | #14 | Immediate-mode shell draws on top of the game view via the D-005 stack; no draw call outside `engine::render` or `debug`. |
+| D-010 | Debug plots: egui_plot for continuity monitor curves, locked at first use; history uses pre-sized buffers only. | #14 | Readout-over-time curves with handoff markers serve the continuity check in [specs.md](specs.md) section 8.7.1. |
+| D-011 | Shell preset serializer: postcard is the default candidate for shell layout presets; bug-bundle exports use TOML plus CSV per debug.md section 11; egui_dock stays deferred and the section 6.1 4-dock layout is hand-placed panels until a dock crate is justified by measured layout cost. | #14 | Presets stay transient per [tech/persistence.md](tech/persistence.md); default aligns with the save-envelope candidate without locking a second serializer. |
+
 ## Open questions
 
 Not blocking M0. Each names its default where one exists.
@@ -48,6 +58,7 @@ Not blocking M0. Each names its default where one exists.
 | [tech/standards.md](tech/standards.md) | Layout, naming, errors, unsafe, lints, docs, dependencies, performance. |
 | [tech/quality.md](tech/quality.md) | Budgets, tiers, CI gates, test policy. |
 | [tech/mobile.md](tech/mobile.md) | OS floors, frame pacer, thermal, textures, GPU set, NDK, threads. |
+| [tech/debug.md](tech/debug.md) | Debug shell panels, inspect view, registry, budget strip, phasing. |
 | [tech/references.md](tech/references.md) | Accepted and rejected sources with reasons. |
 
 Related: [../README.md](../README.md), [specs.md](specs.md).

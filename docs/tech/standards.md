@@ -87,7 +87,7 @@ Notes: `engine` keeps the workspace `deny` for `rust.unsafe_code`; justified use
 
 - One source: `[workspace.dependencies]`. No per-crate version drift.
 - `cargo audit` blocks on known vulnerabilities. `cargo deny` blocks on unapproved licenses and duplicate versions. `cargo hack` checks every feature combination (`--feature-powerset` on workspace members where practical).
-- New dependencies need an architect decision record in [../tech.md](../tech.md) before use.
+- New dependencies need an architect decision record as a D-row in [../tech.md](../tech.md) before use. See [debug.md](debug.md) section 8 for the shell example.
 
 ## Performance rules
 
@@ -103,7 +103,7 @@ overflow-checks = true
 - Global allocator is `mimalloc` in binaries. No per-crate allocator choice.
 - Fast hashers only for trusted internal keys: `foldhash` for in-memory maps with non-adversarial keys. Any map keyed by external input (save content, player text, network data) uses the default `SipHash` hasher.
 - Hot loops use struct-of-arrays layout and avoid pointer chasing.
-- Zero steady-state allocation: no allocation in the sim tick or frame loop after warmup. Allocation is allowed during load and generation only.
+- Zero steady-state allocation: no allocation in the sim tick or frame loop after warmup. Allocation is allowed during load and generation only. Exemption is shell-only: plot, log, and input-recorder buffers are pre-sized at shell open and reused after warmup; any other shell allocation in the frame loop after warmup is a bug, and each exempted use states its measured cost in the issue. See [debug.md](debug.md) sections 8 and 11.
 - Every performance-sensitive change states its measured or estimated cost in the issue.
 
 Related: [../tech.md](../tech.md), [architecture.md](architecture.md), [quality.md](quality.md), [mobile.md](mobile.md).
