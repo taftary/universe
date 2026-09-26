@@ -25,6 +25,7 @@ Owns the vision and the scope. Decides what the game is and is not, arbitrates b
 - Issue goal statements and acceptance criteria (in the issue body).
 - `README.md` updates (vision, pillars, roadmap shape).
 - Decisions recorded as issue comments, prefixed `Decision:`.
+- Finished steps return a self-contained ask/result/files/open result block (posted as the issue Step output comment).
 
 ## Skills and references
 
@@ -58,3 +59,4 @@ When this profile detects that its instructions are missing, wrong or misaligned
 
 - 2026-09-26: created.
 - 2026-09-26: inline Self-update rule from _template.md; add reviewer to Definition of done (#12).
+- 2026-09-27: finished steps return ask/result/files/open result for the Step output comment (#28).

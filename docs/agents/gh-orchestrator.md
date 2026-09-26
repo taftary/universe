@@ -208,12 +208,26 @@ Option mapping: `status:draft` -> `<OPTION_ID_DRAFT>`, `status:planned` -> `<OPT
 ```sh
 gh issue view <nn> --json body -q .body > body.md
 gh issue edit <nn> --body-file body.md
+gh issue comment <nn> --body-file step-output.md
 gh issue comment <nn> --body "Step <N> done: <what was done, files touched>. Next: Step <M> (owner:<profile>)."
 ```
 
 Run this after EVERY completed Step before spawning the next profile; do not batch multiple Steps into one update.
 
-Check off the completed Step in `body.md` by changing `- [ ]` to `- [x]`. Keep the `owner:`, `files:`, and `after:` fields unchanged. Update the body file once per completed Step, then comment. The step-done comment is not the handoff block; keep the `files:` and `after:` fields in the issue body. The step-done comment is a pointer only; Subtasks, Acceptance criteria, and Decisions live in the issue body.
+Check off the completed Step in `body.md` by changing `- [ ]` to `- [x]`. Keep the `owner:`, `files:`, and `after:` fields unchanged. Update the body file once per completed Step, then comment twice: first the Step output comment, then the step-done pointer.
+
+The Step output comment records the finished step so history survives beyond subagent sessions. Write it to `step-output.md` first, then post with `--body-file`. Format:
+
+```md
+## Step <N> output (owner:<profile>)
+
+ask: <one sentence from the handoff brief>
+result: <full output of the step>
+files: <paths touched, or - when none>
+open: <outstanding questions, or none>
+```
+
+Cap the comment at 60k chars; when the output is larger, commit the full text as `step-<N>-output.md` on the branch and link it from the comment instead of pasting. The step-done comment is a pointer only; Subtasks, Acceptance criteria, and Decisions live in the issue body. The Step output comment is the record; keep the `files:` and `after:` fields in the issue body.
 
 ### Update acceptance criteria
 
@@ -287,7 +301,7 @@ gh project item-edit --id <ITEM_ID> --field-id <STATUS_FIELD_ID> --project-id <P
 gh issue close <nn> --comment "Done in <commit-sha or PR>. Docs updated: <paths>."
 ```
 
-The closing comment must post the filled Close checklist: all Acceptance criteria ticked by a non-author reviewer; no open Decisions; one step-done comment per Step; commit sha and docs touched listed.
+The closing comment must post the filled Close checklist: all Acceptance criteria ticked by a non-author reviewer; no open Decisions; one Step output comment plus one step-done comment per Step; commit sha and docs touched listed.
 
 ### Tag and release
 

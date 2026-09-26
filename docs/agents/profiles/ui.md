@@ -30,6 +30,7 @@ Lays out screens, HUD and instruments for the reference phone from the informati
 - Plot definitions for readout-over-time curves used for the continuity check in `docs/specs.md` section 8.7.
 - Layout notes and rationale posted as issue comments; spec layout sections updated where the `area:` mapping requires it.
 - Handoff questions to tester for the legibility check: an unseen tester can descend and return using only the readouts.
+- Finished steps return a self-contained ask/result/files/open result block (posted as the issue Step output comment).
 
 ## Skills and references
 
@@ -71,3 +72,4 @@ When this profile detects that its instructions are missing, wrong or misaligned
 - 2026-09-26: point must-read at docs/tech/stack.md and mobile.md.
 - 2026-09-26: expanded to full template structure with egui plus egui-wgpu scope, visual hierarchy, one-handed ergonomics, 30 fps cost, and ux handoff boundary; inlined Self-update rule.
 - 2026-09-26: add docs/tech/debug.md to must-read for debug-shell design #14.
+- 2026-09-27: finished steps return ask/result/files/open result for the Step output comment (#28).

@@ -18,6 +18,8 @@ What this profile needs before starting (issues, docs, numbers, decisions).
 
 Artefacts this profile produces (spec sections, code, tests, reports) and where they go.
 
+Each finished step also returns a self-contained ask/result/files/open result block for the issue Step output comment (see gh-orchestrator.md Update plan subtasks).
+
 ## Skills and references
 
 - Domain knowledge the profile must apply.
@@ -48,3 +50,4 @@ When this profile detects that its instructions are missing, wrong or misaligned
 ## Changelog
 
 - YYYY-MM-DD: created.
+- 2026-09-27: outputs rule: finished steps return ask/result/files/open result (#28).

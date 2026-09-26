@@ -24,6 +24,7 @@ Owns verification. Turns acceptance criteria into checks, validates physical mod
 - Test cases and test code.
 - Review comment: pass / fail, evidence, tolerances used.
 - Regressions recorded as `type:fix` issues.
+- Finished steps return a self-contained ask/result/files/open result block (posted as the issue Step output comment).
 
 ## Skills and references
 
@@ -61,3 +62,4 @@ When this profile detects that its instructions are missing, wrong or misaligned
 - 2026-09-26: point must-read at docs/tech/quality.md, simulation.md, standards.md.
 - 2026-09-26: inline Self-update rule from _template.md; add reviewer to Definition of done (#12).
 - 2026-09-26: require per-AC PASS/FAIL review output, reviewer-only AC ticking (#15).
+- 2026-09-27: finished steps return ask/result/files/open result for the Step output comment (#28).

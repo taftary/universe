@@ -22,6 +22,7 @@ Shapes unclear requests and measures the project. Produces audits, reports and g
 
 - Reports and audits as issue bodies (tables, counts, findings, recommendations).
 - Shaped issues handed to the right lead via process-orchestrator.
+- Finished steps return a self-contained ask/result/files/open result block (posted as the issue Step output comment).
 
 ## Skills and references
 
@@ -54,3 +55,4 @@ When this profile detects that its instructions are missing, wrong or misaligned
 
 - 2026-09-26: created.
 - 2026-09-26: inline Self-update rule from _template.md (#12).
+- 2026-09-27: finished steps return ask/result/files/open result for the Step output comment (#28).

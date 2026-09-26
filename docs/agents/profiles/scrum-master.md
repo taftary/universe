@@ -28,6 +28,7 @@ Keeps the process healthy: issue hygiene (labels, milestones, stale `status:in-p
 - Process change proposals as `type:change` + `area:process` issues.
 - Updates to `docs/agents/` files (profiles, orchestrators, `README.md` lifecycle).
 - Ceremony notes recorded on the tracking issue.
+- Finished steps return a self-contained ask/result/files/open result block (posted as the issue Step output comment).
 
 ## Skills and references
 
@@ -62,3 +63,4 @@ When this profile detects that its instructions are missing, wrong or misaligned
 
 - 2026-09-26: created as stub.
 - 2026-09-26: expanded to full template structure with process health responsibilities, hygiene and blocker rules, and inline self-update rule (#12).
+- 2026-09-27: finished steps return ask/result/files/open result for the Step output comment (#28).

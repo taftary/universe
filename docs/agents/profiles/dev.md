@@ -24,6 +24,7 @@ Implements what the issue specifies, exactly, in small verifiable increments. Do
 - Code and tests.
 - Issue comments: what was done, what remains, any deviation from the plan.
 - Updated `docs/specs.md` when implementation reveals a spec gap (flag it to the lead).
+- Finished steps return a self-contained ask/result/files/open result block (posted as the issue Step output comment).
 
 ## Skills and references
 
@@ -57,3 +58,4 @@ When this profile detects that its instructions are missing, wrong or misaligned
 - 2026-09-26: created.
 - 2026-09-26: point must-read at docs/tech/standards.md, architecture.md, simulation.md.
 - 2026-09-26: inline Self-update rule from _template.md (#12).
+- 2026-09-27: finished steps return ask/result/files/open result for the Step output comment (#28).

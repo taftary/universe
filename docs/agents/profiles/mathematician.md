@@ -29,6 +29,7 @@ Owns numerical methods: integrators for orbits and atmospheres under time-warp, 
 - Validation comments on issues: approval or correction of physicist and astronomer derivations with checked math.
 - Reference values, tolerances, and golden-hash cases for tester, including warp-step error bounds and energy-drift limits.
 - Cost-per-step estimates for architect and techlead review.
+- Finished steps return a self-contained ask/result/files/open result block (posted as the issue Step output comment).
 
 ## Skills and references
 
@@ -70,3 +71,4 @@ When this profile detects that its instructions are missing, wrong or misaligned
 - 2026-09-26: created as stub.
 - 2026-09-26: point must-read at docs/tech/simulation.md and standards.md.
 - 2026-09-26: expand stub to full template structure with numerical-methods specifics (#12).
+- 2026-09-27: finished steps return ask/result/files/open result for the Step output comment (#28).
