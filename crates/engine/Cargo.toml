@@ -14,5 +14,8 @@ workspace = true
 
 [dependencies]
 glam.workspace = true
+rand_core.workspace = true
+rand_xoshiro.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+xxhash-rust.workspace = true

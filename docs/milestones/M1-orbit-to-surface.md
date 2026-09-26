@@ -1,6 +1,6 @@
 # M1 Orbit to Surface
 
-GitHub milestone 2. Open. Delivered so far: #14.
+GitHub milestone 2. Open. Delivered so far: #14, #20.
 
 ## Goal
 
@@ -13,6 +13,7 @@ Section 8.7 four tests: continuity, repeatability, budget, legibility.
 ## Delivered
 
 - #14 Debug shell design ([../tech/debug.md](../tech/debug.md), closed)
+- #20 Close foundations gap: units, SIM_TICK_S, PRNG, hash (this issue — closed by the PR merge)
 
 ## Plan
 
@@ -27,7 +28,7 @@ Six-issue chain, one unproven system at a time:
 
 ## Carry-over (agreed)
 
-Scaffold left SIM_TICK_S and PRNG unpinned although simulation doc says fixed/pinned at scaffold. Agreed values to lock in M1 issue 1: SIM_TICK_S = 0.05 s (D-009), xoshiro256** via rand_xoshiro with SplitMix64 domain split (D-010), xxh3-64 snapshot hash (D-011).
+Scaffold left SIM_TICK_S and PRNG unpinned although simulation doc says fixed/pinned at scaffold. Agreed values to lock in M1 issue 1: SIM_TICK_S = 0.05 s (D-012), xoshiro256** via rand_xoshiro with SplitMix64 domain split (D-013), xxh3-64 snapshot hash (D-014).
 
 ## Definition of Done
 

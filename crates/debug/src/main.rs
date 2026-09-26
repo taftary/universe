@@ -4,9 +4,6 @@
 
 #![forbid(unsafe_code)]
 
-/// Fixed step in seconds for the demo tick run.
-const DEFAULT_STEP_S: f64 = 0.5;
-
 /// Demo tick count for the headless run.
 const DEFAULT_TICK_COUNT: u64 = 4;
 
@@ -21,14 +18,14 @@ static GLOBAL_ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
 fn main() -> anyhow::Result<()> {
     let span = tracing::span!(tracing::Level::INFO, "debug_ticks");
     let _guard = span.enter();
-    let mut scheduler = engine::sim::Scheduler::new(DEFAULT_STEP_S)?;
+    let mut scheduler = engine::sim::Scheduler::new(engine::sim::SIM_TICK_S)?;
     for _ in 0..DEFAULT_TICK_COUNT {
         scheduler.advance();
     }
     println!(
         "ticks={} elapsed_s={}",
         scheduler.step_count(),
-        scheduler.elapsed_s()
+        scheduler.elapsed().value()
     );
     Ok(())
 }

@@ -29,6 +29,11 @@ thiserror = "2"
 anyhow = "1"
 tracing = { version = "0.1", features = ["attributes"] }
 mimalloc = "0.1"
+# D-013 project PRNG (xoshiro256** plus SplitMix64 domains); see docs/tech/simulation.md.
+rand_core = "0.10"
+rand_xoshiro = "0.8"
+# D-014 snapshot hash (xxh3-64); xxh3 feature only.
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
 universe-engine = { path = "crates/engine" }
 universe-game = { path = "crates/game" }
 

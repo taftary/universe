@@ -36,7 +36,7 @@ One active center at a time. Handoffs translate state between parent and child f
 
 - Coasting orbits propagate analytically (Kepler propagation, on rails under warp per the time-warp rules below). Numerical integration (semi-implicit Euler at MVP, velocity Verlet when the error budget needs it) is only for powered flight and atmospheric descent. Energy drift is tested as an invariant in [quality.md](quality.md).
 - Internal non-dimensionalisation is allowed inside a solver for conditioning. SI remains the interface at the gameplay level per [specs.md](../specs.md) section 2.
-- Step sizes are named constants with units, fixed in `tech.md` at scaffold. No frame-rate-dependent `dt`.
+- Step sizes are named constants with units, locked in `tech.md` (D-012). No frame-rate-dependent `dt`.
 
 ## Time-warp state machine
 
@@ -49,21 +49,22 @@ Mirrors [specs.md](../specs.md) section 2 rules exactly:
 
 - Warp drops to 1x automatically on atmospheric entry, on approach to any body or object, and whenever any physiological alarm is raised.
 - Under warp, orbits propagate analytically (on rails). Consumables and physiology integrate at coarse steps sized to the warp factor.
-- Maximum warp constant: `MAX_WARP_FACTOR = 10000.0 dimensionless`, source: [specs.md](../specs.md) section 2. Minimum tick: `SIM_TICK_S = to be fixed at scaffold`, never derived from frame time.
+- Maximum warp constant: `MAX_WARP_FACTOR = 10000.0 dimensionless`, source: [specs.md](../specs.md) section 2. Minimum tick: `SIM_TICK_S = 0.05 s` (D-012), never derived from frame time.
 
 ## Seeds and procedural content
 
-- Hierarchical seeds with domain separation: `master_seed_u64` splits into `gen_star`, `gen_body`, `gen_terrain` streams via distinct domain tags. Changing one domain never changes another.
+- Hierarchical seeds with domain separation: `master_seed_u64` splits into `gen_star`, `gen_body`, `gen_terrain` streams via distinct SplitMix64 domain tags. Changing one domain never changes another (D-013).
+- Project PRNG is pinned to xoshiro256** via `rand_xoshiro` (`rand_core` traits for injection). No device RNG in sim or gen. Algorithm and domain tags are recorded here per D-013.
 - Procedural content is never saved. Only the seed and player-placed state persist; see [persistence.md](persistence.md).
 
 ## Determinism rules
 
-- Injected RNG, clock, and IO. Sim takes `&mut dyn RngCore`-style project PRNG, a `tick count` clock, and no direct file or network access.
-- Project-owned PRNG. No device RNG in sim or gen. Algorithm is pinned at scaffold and recorded here.
+- Injected RNG, clock, and IO. Sim takes a project `ProjectRng` built on `TryRng` with the blanket `Rng` impl (xoshiro256** per D-013; rand_core 0.10 deprecates the old single core trait), a `tick count` clock, and no direct file or network access.
+- Project-owned PRNG. No device RNG in sim or gen. Algorithm is pinned (D-013) and recorded in Seeds above.
 - No platform `libm` transcendentals in sim. Use the pinned project math path so x86_64 and AArch64 agree.
 - No `HashMap` iteration in sim. Order-dependent state uses `BTreeMap` or indexed vectors.
 - Fixed `rayon` fold order where parallelism exists. Document the split count; test with two thread counts.
 - No `target-cpu=native`. Release flags are shared; see [standards.md](standards.md).
-- Golden-hash tests run across x86_64 and AArch64. Same inputs yield the same state hash to within documented floating-point noise. Policy in [quality.md](quality.md).
+- Golden-hash tests run across x86_64 and AArch64. Snapshots hash with xxh3-64 via `xxhash-rust` (D-014). Same inputs yield the same state hash to within documented floating-point noise. Policy in [quality.md](quality.md).
 
 Related: [../tech.md](../tech.md), [architecture.md](architecture.md), [quality.md](quality.md), [standards.md](standards.md).

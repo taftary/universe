@@ -8,7 +8,9 @@ yanked = "deny"
 unmaintained = "workspace"
 
 [licenses]
-allow = ["Apache-2.0", "MIT", "Unicode-3.0"]
+# BSL-1.0 is OSI-approved and FSF-free; required by xxhash-rust (D-014 snapshot hash).
+# Workspace crates are unpublished, so there is no distribution exposure.
+allow = ["Apache-2.0", "BSL-1.0", "MIT", "Unicode-3.0"]
 
 # Workspace crates are unpublished (`publish = false` in manifests), so their
 # (deliberately absent) license expressions are not checked. Choosing a

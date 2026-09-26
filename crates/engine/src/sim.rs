@@ -3,6 +3,7 @@
 use glam::DVec3;
 
 use crate::error::EngineError;
+use crate::units::Seconds;
 
 /// Origin of the camera-relative frame in meters.
 ///
@@ -47,65 +48,97 @@ impl FloatingOrigin {
     }
 }
 
+/// Minimum fixed sim tick; never derived from frame time.
+///
+/// Source: D-012, locked in `docs/tech.md`; see `docs/tech/simulation.md`.
+pub const SIM_TICK_S: Seconds = Seconds::new(0.05);
+
 /// Fixed-step scheduler: advances sim time by a constant step.
 ///
 /// # Example
 ///
 /// ```
 /// # use engine::sim::Scheduler;
-/// let scheduler = Scheduler::new(0.5);
+/// # use engine::units::Seconds;
+/// let scheduler = Scheduler::new(Seconds::new(0.5));
 /// assert!(scheduler.is_ok());
+/// if let Ok(scheduler) = scheduler {
+///     assert!(scheduler.step().value() == 0.5);
+/// }
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Scheduler {
     /// Fixed step in seconds.
-    step_s: f64,
+    step: Seconds,
     /// Elapsed sim time in seconds.
-    elapsed_s: f64,
+    elapsed: Seconds,
     /// Steps advanced so far.
     step_count: u64,
 }
 
 impl Scheduler {
-    /// Fixed step in seconds; must be positive and finite.
+    /// Create a scheduler with the given fixed step.
     ///
     /// # Errors
     ///
-    /// Returns `EngineError::InvalidStep` when `step_s` is not positive.
-    pub fn new(step_s: f64) -> Result<Self, EngineError> {
-        if step_s.is_finite() && step_s > 0.0 {
+    /// Returns `EngineError::InvalidStep` when `step` is not positive and finite.
+    pub fn new(step: Seconds) -> Result<Self, EngineError> {
+        if step.value().is_finite() && step.value() > 0.0 {
             Ok(Self {
-                step_s,
-                elapsed_s: 0.0,
+                step,
+                elapsed: Seconds::new(0.0),
                 step_count: 0,
             })
         } else {
-            Err(EngineError::InvalidStep { step_s })
+            Err(EngineError::InvalidStep {
+                step_s: step.value(),
+            })
         }
     }
 
     /// Advance one fixed step.
     #[tracing::instrument(skip(self))]
     pub fn advance(&mut self) {
-        self.elapsed_s += self.step_s;
+        self.elapsed += self.step;
         self.step_count += 1;
     }
 
     /// Fixed step in seconds.
     #[must_use]
-    pub fn step_s(&self) -> f64 {
-        self.step_s
+    pub fn step(&self) -> Seconds {
+        self.step
     }
 
     /// Elapsed sim time in seconds.
     #[must_use]
-    pub fn elapsed_s(&self) -> f64 {
-        self.elapsed_s
+    pub fn elapsed(&self) -> Seconds {
+        self.elapsed
     }
 
     /// Steps advanced so far.
     #[must_use]
     pub fn step_count(&self) -> u64 {
         self.step_count
+    }
+}
+
+impl Default for Scheduler {
+    /// Default scheduler at the minimum fixed tick.
+    ///
+    /// Uses [`SIM_TICK_S`], which is valid by construction and never fails.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use engine::sim::Scheduler;
+    /// let scheduler = Scheduler::default();
+    /// assert!(scheduler.step().value() == engine::sim::SIM_TICK_S.value());
+    /// ```
+    fn default() -> Self {
+        Self {
+            step: SIM_TICK_S,
+            elapsed: Seconds::new(0.0),
+            step_count: 0,
+        }
     }
 }
