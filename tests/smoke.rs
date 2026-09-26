@@ -1,7 +1,9 @@
-//! Headless sim smoke: fixed-step profile placeholder.
+//! Headless sim smoke: fixed-step profile plus snapshot golden.
 //!
 //! Grows into the descent-profile gate in `docs/tech/quality.md`: same seed
-//! and inputs yield the same state hash across runs and platforms.
+//! and inputs yield the same state hash across runs and platforms. Snapshot
+//! golden tests need the `dev-shell` feature for `engine::inspect`; the
+//! remaining tests run without features.
 
 #![forbid(unsafe_code)]
 
@@ -27,14 +29,27 @@ const SALT_ONE: u64 = 1;
 const SALT_TWO: u64 = 2;
 
 /// Ticks advanced by the golden-hash profile.
+#[cfg(feature = "dev-shell")]
 const GOLDEN_TICK_COUNT: u64 = 100;
 
 /// Seed for the golden-hash profile. Source: fractional hex digits of pi.
 /// Fixed project constant for the determinism gate.
+#[cfg(feature = "dev-shell")]
 const GOLDEN_SEED_U64: u64 = 0x243F_6A88_85A3_08D3;
 
 /// Expected xxh3-64 digest after 100 golden ticks.
-const GOLDEN_100_TICK_HASH_U64: u64 = 8_292_327_165_828_879_141;
+///
+/// Snapshot golden for the headless M1 cruise profile documented in
+/// `golden_hash_after_ticks`; relocked in issue 32 step 3.
+#[cfg(feature = "dev-shell")]
+const GOLDEN_100_TICK_HASH_U64: u64 = 17_172_072_447_561_828_286;
+
+/// Cruise altitude in meters for the golden profile.
+///
+/// Circular Mars-like orbit above the rails cutoff; source: M1 cruise
+/// profile in issue 32 step 3, matching the 250 km low-orbit reference.
+#[cfg(feature = "dev-shell")]
+const GOLDEN_ALTITUDE_M: f64 = 250_000.0;
 
 /// Negative fixed step rejected by the scheduler.
 const NEGATIVE_STEP_S: f64 = -0.5;
@@ -94,17 +109,83 @@ fn game_tick_smoke() {
 }
 
 /// Run the golden profile for a tick count and seed.
+///
+/// Steps the headless M1 cruise profile with the default scheduler at
+/// `SIM_TICK_S`: Mars-like body and atmosphere, preset point-ship from a
+/// 250 km circular orbit at `mu/r` speed, `Warp::X1` cruise inside the ship.
+/// Each tick advances the scheduler, steps with `step_point_ship`, mixes the
+/// stream seed with `mix_seed`, and captures a `SimSnapshot`; the digest is
+/// `snapshot_hash` of the last snapshot. Intermediate ticks pin transitively
+/// through deterministic stepping. Deterministic `libm`-only math, no IO.
+#[cfg(feature = "dev-shell")]
 fn golden_hash_after_ticks(tick_count_u64: u64, seed_u64: u64) -> u64 {
+    use engine::atmosphere::AtmosphereParams;
+    use engine::body::BodyParams;
+    use engine::inspect::{capture_snapshot, snapshot_hash};
+    use engine::orbit::Mu;
+    use engine::sim::{SIM_TICK_S, Scheduler};
+    use engine::trajectory::{StateVector, VehicleParams, step_point_ship};
+    use engine::units::Seconds;
+    use engine::warp::Warp;
+    use glam::DVec3;
+
+    let body = BodyParams::mars_like();
+    let atmosphere = match AtmosphereParams::mars_like() {
+        Ok(atmosphere) => atmosphere,
+        Err(error) => panic!("golden atmosphere must validate: {error}"),
+    };
+    let vehicle = VehicleParams::preset();
+    let mu = match Mu::new(body.gravitational_parameter_m3_s2()) {
+        Ok(mu) => mu,
+        Err(error) => panic!("golden mu must validate: {error}"),
+    };
+    let radius_m_f64 = body.radius_m().value() + GOLDEN_ALTITUDE_M;
+    let speed_mps_f64 = libm::sqrt(mu.value() / radius_m_f64);
+    let mut state = match StateVector::new(
+        DVec3::new(radius_m_f64, 0.0, 0.0),
+        DVec3::new(0.0, speed_mps_f64, 0.0),
+        Seconds::new(0.0),
+    ) {
+        Ok(state) => state,
+        Err(error) => panic!("golden state must validate: {error}"),
+    };
     let mut scheduler = Scheduler::default();
-    let mut mixed_u64 = seed_u64;
+    let mut stream_seed_u64 = seed_u64;
+    let mut digest_u64 = 0_u64;
     for _ in 0..tick_count_u64 {
         scheduler.advance();
-        mixed_u64 = engine::generation::mix_seed(mixed_u64, scheduler.step_count());
+        let sample = match step_point_ship(&state, SIM_TICK_S, &body, &atmosphere, &vehicle, mu) {
+            Ok(sample) => sample,
+            Err(error) => panic!("golden step must succeed: {error}"),
+        };
+        state = sample.state;
+        stream_seed_u64 = engine::generation::mix_seed(stream_seed_u64, scheduler.step_count());
+        let snapshot = match capture_snapshot(
+            &scheduler,
+            &state,
+            &body,
+            &atmosphere,
+            &vehicle,
+            seed_u64,
+            stream_seed_u64,
+            Warp::X1,
+            true,
+            false,
+            false,
+        ) {
+            Ok(snapshot) => snapshot,
+            Err(error) => panic!("golden capture must succeed: {error}"),
+        };
+        digest_u64 = snapshot_hash(&snapshot);
     }
-    engine::hash::scheduler_hash(&scheduler, mixed_u64)
+    digest_u64
 }
 
-/// Golden digest pins 100 scheduler ticks across platforms.
+/// Golden digest pins 100 snapshot ticks across platforms.
+///
+/// Headless M1 cruise profile hashed via `SimSnapshot`; `libm`-only math
+/// keeps `x86_64` and `AArch64` in agreement.
+#[cfg(feature = "dev-shell")]
 #[test]
 fn golden_hash_100_ticks() {
     let hash_u64 = golden_hash_after_ticks(GOLDEN_TICK_COUNT, GOLDEN_SEED_U64);
@@ -112,6 +193,7 @@ fn golden_hash_100_ticks() {
 }
 
 /// Perturbed seed or truncated run changes the digest.
+#[cfg(feature = "dev-shell")]
 #[test]
 fn hash_perturbation_changes_digest() {
     let baseline_u64 = golden_hash_after_ticks(GOLDEN_TICK_COUNT, GOLDEN_SEED_U64);

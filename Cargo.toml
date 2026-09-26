@@ -21,6 +21,8 @@ rust-version = "1.95"
 # One source for versions (`docs/tech/standards.md`); caret within the locked
 # major lines (`docs/tech/stack.md`). Render and UI crates (`wgpu`, `winit`,
 # `naga`, `egui`) join the used set when the first render code lands.
+# Dev-shell `SimSnapshot` plain-data view (`bytemuck` `Pod`); D-row in Step 5.
+bytemuck = { version = "1", features = ["derive"] }
 glam = "0.33"
 # Wired when the scheduler-storage work lands (D-004); kept here so the lock
 # line stays the single source.
@@ -77,3 +79,8 @@ workspace = true
 [dev-dependencies]
 universe-engine.workspace = true
 universe-game.workspace = true
+glam.workspace = true
+libm.workspace = true
+
+[features]
+dev-shell = ["universe-engine/dev-shell"]

@@ -2,7 +2,7 @@
 
 **Status:** Decided for M0. This file is the index of locked decisions. Detail lives in `tech/`.
 **Spelling:** US English throughout `docs/tech/` (behavior, meters, kilometers, organize).
-**Last updated:** 2026-09-26.
+**Last updated:** 2026-09-27.
 
 ## Fixed constraints (from README)
 
@@ -15,7 +15,7 @@ From [../README.md](../README.md) and [specs.md](specs.md#2-global-conventions) 
 
 ## Decisions
 
-Decisions D-001..D-008 were confirmed on 2026-09-26; D-012..D-014 were locked on 2026-09-26 for #20; D-015..D-016 were locked on 2026-09-26 for #22; D-017..D-018 were locked on 2026-09-26 for #23; D-019..D-021 were locked on 2026-09-26 for #26. Wording below is verbatim. Each links to its tracking issue.
+Decisions D-001..D-008 were confirmed on 2026-09-26; D-012..D-014 were locked on 2026-09-26 for #20; D-015..D-016 were locked on 2026-09-26 for #22; D-017..D-018 were locked on 2026-09-26 for #23; D-019..D-021 were locked on 2026-09-26 for #26; D-022 was locked on 2026-09-27 for #32. Wording below is verbatim. Each links to its tracking issue.
 
 | ID | Decision (verbatim) | Issue | Rationale |
 | --- | --- | --- | --- |
@@ -37,6 +37,7 @@ Decisions D-001..D-008 were confirmed on 2026-09-26; D-012..D-014 were locked on
 | D-019 | Impulsive prograde/retrograde burns along the inertial velocity unit vector with non-negative unit-typed delta-v, unchanged position and epoch, zero-speed rejection, vis-viva post-burn check within 1e-6 relative and elements round-trip within 1e-9 relative. | #26 | Burns shift energy along the velocity direction without touching the coasting model; detail in [tech/simulation.md](tech/simulation.md). |
 | D-020 | Point-ship trajectory with analytic rails above 120 km and semi-implicit Euler at SIM_TICK_S 0.05 s below, shared body g(z) and corotating relative wind, drag a = -rho * \|vrel\| * vrel / (2 * B) with B 120 kg/m2, Sutton-Graves q = k * sqrt(rho / r_n) * v^3 with k 1.9027e-4 SI and r_n 1.0 m, g-load over 9.80665 m/s2, exact-time split at the cutoff with C0 aero handoff, Mu from BodyParams, transcendentals via libm crate only. | #26 | One gravity field and one wind feed rails and integration so the descent path stays continuous; detail in [tech/simulation.md](tech/simulation.md). |
 | D-021 | Flight regimes Orbit above 120 km / Atmosphere in (0, 120 km] / Surface at or below 0 m with classify/classify_state, adjacent-only transitions, signed distance to Rails/Surface boundaries, warp mapping orbit-cruise / atmosphere-entry auto-drop / surface-grounded, surface contact via altitude plus corotating relative speed with touchdown at 0.5 m and 5 m/s. | #26 | Regime labels gate the integrator choice and warp policy while surface geometry settles touchdown; detail in [tech/simulation.md](tech/simulation.md). |
+| D-022 | SimSnapshot 304-byte bytemuck Pod transport behind dev-shell feature, 263-byte little-endian snapshot_hash, capture_snapshot MVP derivation. | #32 | Plain-data snapshot crosses the sim to render boundary as memcopy-safe bytes with dev-only Pod derive; golden digest pins repeatability; detail in [tech/architecture.md](tech/architecture.md), [tech/simulation.md](tech/simulation.md), and [tech/debug.md](tech/debug.md). |
 
 ### Candidate decisions for #14 (design, not locked)
 

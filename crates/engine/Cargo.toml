@@ -9,10 +9,14 @@ publish.workspace = true
 name = "engine"
 path = "src/lib.rs"
 
+[features]
+dev-shell = ["dep:bytemuck"]
+
 [lints]
 workspace = true
 
 [dependencies]
+bytemuck = { workspace = true, optional = true }
 glam.workspace = true
 libm.workspace = true
 rand_core.workspace = true

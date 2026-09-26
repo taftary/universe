@@ -40,7 +40,10 @@ pub fn hash_bytes(bytes: &[u8]) -> u64 {
 /// bits as `u64` little-endian (8 bytes), then `seed` as `u64`
 /// little-endian (8 bytes), for 32 bytes total hashed with xxh3-64.
 /// `to_le_bytes` plus `to_bits` make the layout platform-independent;
-/// float arithmetic cross-arch sameness is pinned later by the golden test.
+/// float arithmetic cross-arch sameness is pinned by the `SimSnapshot`
+/// golden test in `tests/smoke.rs`, which locks the `xxh3-64` digest over
+/// `libm`-only stepping on `x86_64` and `AArch64`; this function pins
+/// the scheduler byte layout only.
 ///
 /// # Example
 ///
