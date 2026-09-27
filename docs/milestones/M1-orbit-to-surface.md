@@ -48,8 +48,26 @@ Scaffold left SIM_TICK_S and PRNG unpinned although simulation doc says fixed/pi
 - Exit: mvp.md pass/fail four tests pass, CI gates green.
 - Release: tag referenced here when cut.
 
+## Verification
+
+Verification pass 2026-09-27 on branch `task/42-m1-verification-release`, PR 43 (draft). Report: [M1-verification.md](M1-verification.md). GitHub milestone 2 remains open, 0 of 23 issues closed.
+
+Step 13 review verdict: PARTIAL READY (Steps 11-13 done). M1 closes partial; remainder moves to M2.
+
+- AC1 Continuity: PASS.
+- AC2 Repeatability: PASS, single-platform only.
+- AC3 Budget: OPEN, no on-device run (headless pass only).
+- AC4 Legibility: DEFERRED to M2, blind run per ux protocol appendix.
+- AC5 CI gates: conditional PASS, PR 43 CI green on android/gates/ios/msrv (run 36334941078); local cross-targets NOT RUN.
+- AC6 Report: PASS.
+- AC7 Release: OPEN, no tag cut; no release claimed.
+
+Steps 11-13 done: ux legibility protocol appended, PO ruled mvp.md 8.7 unchanged, verification re-marked PARTIAL READY.
+
+M2 follow-up (draft): blind legibility run per protocol appendix (AC4), on-device budget run (AC3), tag (AC7).
+
 ## Next
 
-After #40 merges: M1 verification pass against the four [mvp.md](../topics/mvp.md) tests, then release.
+Partial close: AC1/AC2/AC6 pass. M2 carries AC4 blind run per protocol appendix, AC3 on-device run, and tag (AC7). No release claimed, no tag cut.
 
 Related: [../../README.md](../../README.md), [../tech.md](../tech.md), [../agents/gh-orchestrator.md](../agents/gh-orchestrator.md).
