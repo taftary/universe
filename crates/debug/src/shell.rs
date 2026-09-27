@@ -27,13 +27,17 @@ use crate::tweak::{TweakBoard, TweakError};
 use engine::warp::{Warp, WarpContext};
 
 #[cfg(feature = "dev-shell")]
-use crate::bottom::{BottomDraw, BottomTabs};
+use crate::bottom::{BottomDraw, BottomTab, BottomTabs};
 #[cfg(feature = "dev-shell")]
 use crate::budget::BudgetDenominators;
 #[cfg(feature = "dev-shell")]
 use crate::determinism::{DeterminismDraw, DeterminismWindow, ReplayReport};
 #[cfg(feature = "dev-shell")]
+use crate::layout::DesktopWindowConfig;
+#[cfg(feature = "dev-shell")]
 use engine::inspect::SimSnapshot;
+#[cfg(feature = "dev-shell")]
+use engine::regime::Regime;
 
 /// Shell assembly failures from the owned parts.
 ///
@@ -213,6 +217,64 @@ pub struct BundleIdentity {
     pub platform: String,
     /// Thermal tier label text.
     pub tier: String,
+}
+
+/// Desktop-tester readouts for legibility runs.
+///
+/// Copies only the AC4 legibility scalars from the inspect view:
+/// clocks, seven continuity channels, orbital elements, warp factor,
+/// and regime labels. Holds no vectors, no seeds, no hashes, and no
+/// picks; the tester gates burns and handoffs on these fields alone.
+/// Available only with the non-default `dev-shell` feature.
+#[cfg(feature = "dev-shell")]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DesktopTesterReadouts {
+    /// Tick count, dimensionless.
+    pub tick_count_u64: u64,
+    /// Elapsed sim time in seconds.
+    pub elapsed_s_f64: f64,
+    /// Ship epoch in seconds.
+    pub ship_epoch_s_f64: f64,
+    /// Altitude above surface in meters.
+    pub altitude_m_f64: f64,
+    /// Corotating speed in meters per second.
+    pub speed_mps_f64: f64,
+    /// Pressure in pascals.
+    pub pressure_pa_f64: f64,
+    /// Temperature in kelvin.
+    pub temperature_k_f64: f64,
+    /// Density in kilograms per cubic meter.
+    pub density_kg_m3_f64: f64,
+    /// Heat flux in watts per square meter.
+    pub heat_flux_w_per_m2_f64: f64,
+    /// G-load in g units, dimensionless.
+    pub g_load_g_f64: f64,
+    /// Semi-major axis in meters.
+    pub semi_major_axis_m_f64: f64,
+    /// Eccentricity, dimensionless.
+    pub eccentricity_f64: f64,
+    /// Inclination in radians.
+    pub inclination_rad_f64: f64,
+    /// Node longitude in radians.
+    pub raan_rad_f64: f64,
+    /// Argument of periapsis in radians.
+    pub arg_periapsis_rad_f64: f64,
+    /// Mean anomaly in radians.
+    pub mean_anomaly_rad_f64: f64,
+    /// Gravity parameter in cubic meters per second squared.
+    pub mu_m3_s2_f64: f64,
+    /// True when orbital elements are valid.
+    pub elements_valid_bool: bool,
+    /// Warp factor, dimensionless.
+    pub warp_factor_f64: f64,
+    /// Current regime for handoff detection.
+    pub regime: Regime,
+    /// Regime label for display.
+    pub regime_label: &'static str,
+    /// Auto-drop reason label for display.
+    pub drop_label: &'static str,
+    /// Frame level label for display.
+    pub frame_label: &'static str,
 }
 
 /// Debug shell assembly with run control, cost, input, and inspect.
@@ -678,6 +740,43 @@ impl Shell {
         Ok(())
     }
 
+    /// Copy desktop-tester readouts from the inspect view.
+    ///
+    /// Reads only the allowed legibility getters: clocks, seven
+    /// continuity channels, orbital elements, warp factor, and regime
+    /// labels. Never touches vectors, seeds, hashes, or picks. Shell
+    /// state only. Available only with the non-default `dev-shell`
+    /// feature.
+    #[cfg(feature = "dev-shell")]
+    #[must_use]
+    pub const fn desktop_tester_readouts(&self) -> DesktopTesterReadouts {
+        DesktopTesterReadouts {
+            tick_count_u64: self.inspect.tick_count_u64(),
+            elapsed_s_f64: self.inspect.elapsed_s_f64(),
+            ship_epoch_s_f64: self.inspect.ship_epoch_s_f64(),
+            altitude_m_f64: self.inspect.altitude_m_f64(),
+            speed_mps_f64: self.inspect.speed_mps_f64(),
+            pressure_pa_f64: self.inspect.pressure_pa_f64(),
+            temperature_k_f64: self.inspect.temperature_k_f64(),
+            density_kg_m3_f64: self.inspect.density_kg_m3_f64(),
+            heat_flux_w_per_m2_f64: self.inspect.heat_flux_w_per_m2_f64(),
+            g_load_g_f64: self.inspect.g_load_g_f64(),
+            semi_major_axis_m_f64: self.inspect.semi_major_axis_m_f64(),
+            eccentricity_f64: self.inspect.eccentricity_f64(),
+            inclination_rad_f64: self.inspect.inclination_rad_f64(),
+            raan_rad_f64: self.inspect.raan_rad_f64(),
+            arg_periapsis_rad_f64: self.inspect.arg_periapsis_rad_f64(),
+            mean_anomaly_rad_f64: self.inspect.mean_anomaly_rad_f64(),
+            mu_m3_s2_f64: self.inspect.mu_m3_s2_f64(),
+            elements_valid_bool: self.inspect.elements_valid(),
+            warp_factor_f64: self.inspect.warp_factor_f64(),
+            regime: self.inspect.regime(),
+            regime_label: self.inspect.regime_label(),
+            drop_label: self.inspect.drop_label(),
+            frame_label: self.inspect.frame_label(),
+        }
+    }
+
     /// Mark the shell closed via the close-shell button.
     pub const fn request_close(&mut self) {
         self.meter.request_close();
@@ -1071,6 +1170,191 @@ impl Shell {
     }
 }
 
+/// Desktop flight window over one shell assembly.
+///
+/// Headless-proven window state for the same-build scaled-up desktop shell:
+/// opens ticker-only and blind, watches the Descent preset, flies through
+/// [`DesktopTesterReadouts`], and records shell draw cost on every draw.
+/// Content never forks between presets; preset switches only change dock
+/// visibility plus the default bottom tab. The OS window itself (winit event
+/// loop plus wgpu surface plus egui-wgpu renderer) lands in a later step
+/// under D-003; this assembly draws through the existing headless egui
+/// context meanwhile, so no new dependency enters the lockfile (`winit` is
+/// not in `Cargo.lock`). Available only with the non-default `dev-shell`
+/// feature.
+#[cfg(feature = "dev-shell")]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "OS window wiring lands in a later step; unit tests cover the assembly meanwhile."
+    )
+)]
+#[derive(Debug, Clone)]
+pub struct DesktopWindow {
+    /// Owned shell assembly with run control plus inspect.
+    shell: Shell,
+    /// Scaffold size plus visibility preset; shell state only.
+    config: DesktopWindowConfig,
+}
+
+#[cfg(feature = "dev-shell")]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "OS window wiring lands in a later step; unit tests cover the assembly meanwhile."
+    )
+)]
+impl DesktopWindow {
+    /// Open a ticker-only window with the shell in passthrough.
+    ///
+    /// Starts blind with the top bar alone for minimal occlusion; call
+    /// [`Self::set_preset`] with [`DesktopPreset::Descent`] for handoff
+    /// watching. Shell state only and never persists.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ShellError`] when the default pick tolerance is rejected.
+    pub fn open() -> Result<Self, ShellError> {
+        let mut shell = Shell::new()?;
+        shell.set_visibility(PanelVisibility::for_preset(DesktopPreset::TickerOnly));
+        Ok(Self {
+            shell,
+            config: DesktopWindowConfig::ticker_only(),
+        })
+    }
+
+    /// Return the window configuration.
+    #[must_use]
+    pub const fn config(&self) -> DesktopWindowConfig {
+        self.config
+    }
+
+    /// Return the owned shell assembly.
+    #[must_use]
+    pub const fn shell(&self) -> &Shell {
+        &self.shell
+    }
+
+    /// Return the owned shell assembly for run control.
+    ///
+    /// Shell state only; run control never writes sim state directly.
+    pub const fn shell_mut(&mut self) -> &mut Shell {
+        &mut self.shell
+    }
+
+    /// Return dock visibility for the current preset.
+    #[must_use]
+    pub const fn visibility(&self) -> PanelVisibility {
+        self.shell.visibility()
+    }
+
+    /// Return the current input-routing mode.
+    #[must_use]
+    pub const fn mode(&self) -> ShellInputMode {
+        self.shell.mode()
+    }
+
+    /// Handle a desktop toggle key and return the new mode.
+    pub const fn handle_key(&mut self, key: RouterKey) -> ShellInputMode {
+        self.shell.handle_key(key)
+    }
+
+    /// Report whether the close-shell button was pressed.
+    #[must_use]
+    pub const fn is_closed(&self) -> bool {
+        self.shell.is_closed()
+    }
+
+    /// Mark the shell closed via the close-shell button.
+    pub const fn request_close(&mut self) {
+        self.shell.request_close();
+    }
+
+    /// Reopen the shell after a close.
+    pub const fn reopen(&mut self) {
+        self.shell.reopen();
+    }
+
+    /// Switch dock visibility plus default tab without changing content.
+    ///
+    /// Ticker-only shows the top bar alone; Descent adds the left panel and
+    /// the bottom tabs with the continuity tab selected for handoff
+    /// watching. Preset choice is shell state only and never persists.
+    pub fn set_preset(&mut self, preset: DesktopPreset) {
+        self.config.set_preset(preset);
+        self.shell
+            .set_visibility(PanelVisibility::for_preset(preset));
+        if let Some(tab) = BottomTab::default_for_preset(preset) {
+            self.shell.bottom_tabs_mut().select(tab);
+        }
+    }
+
+    /// Observe a snapshot by copy without writing sim state.
+    ///
+    /// Forwards clocks plus warp, seed, and hash to the top bar, records
+    /// the readout curves in the continuity monitor, and replaces the
+    /// inspect view.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ShellError`] for bad snapshot clocks or unknown codes.
+    pub fn observe_snapshot(&mut self, snapshot: &SimSnapshot) -> Result<(), ShellError> {
+        self.shell.observe_snapshot(snapshot)
+    }
+
+    /// Copy desktop-tester readouts from the inspect view.
+    ///
+    /// Reads only the allowed legibility getters: clocks, seven continuity
+    /// channels, orbital elements, warp factor, and regime labels. Never
+    /// touches vectors, seeds, hashes, or picks.
+    #[must_use]
+    pub const fn tester_readouts(&self) -> DesktopTesterReadouts {
+        self.shell.desktop_tester_readouts()
+    }
+
+    /// Return the latest shell draw cost in milliseconds.
+    #[must_use]
+    pub const fn draw_cost_ms_f64(&self) -> f64 {
+        self.shell.draw_cost_ms_f64()
+    }
+
+    /// Return the mean shell draw cost in milliseconds.
+    #[must_use]
+    pub fn average_draw_ms_f64(&self) -> f64 {
+        self.shell.average_draw_ms_f64()
+    }
+
+    /// Draw one frame and record the measured shell cost.
+    ///
+    /// Times the immediate-mode draw with the wall clock and feeds the
+    /// elapsed milliseconds into the shell-cost hook, so the top-bar shell
+    /// badge and the budget strip observe every window frame. Pass
+    /// `FRAME_BUDGET_MS` as `frame_budget_ms_f64`; gates live in quality
+    /// docs. Immediate-mode widgets only; creates no renderer.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ShellError`] when the measured draw cost is rejected.
+    pub fn draw_measured(
+        &mut self,
+        ctx: &egui::Context,
+        ui: &mut egui::Ui,
+        frame_budget_ms_f64: f64,
+        budgets: BudgetDenominators,
+        tracy_connected_bool: bool,
+    ) -> Result<ShellAction, ShellError> {
+        let start = std::time::Instant::now();
+        let action = self
+            .shell
+            .draw(ctx, ui, frame_budget_ms_f64, budgets, tracy_connected_bool);
+        let draw_ms_f64 = start.elapsed().as_secs_f64() * crate::top_bar::MILLIS_PER_SECOND_F64;
+        self.shell.record_draw_cost(draw_ms_f64)?;
+        Ok(action)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1080,6 +1364,25 @@ mod tests {
     const SMOKE_BUDGET_MS_F64: f64 = 32.0;
     const EXPECTED_FRACTION_F64: f64 = 0.0125;
     const FRACTION_TOL_F64: f64 = 1e-12;
+
+    #[cfg(feature = "dev-shell")]
+    const WINDOW_FRAME_BUDGET_MS_F64: f64 = 32.0;
+    #[cfg(feature = "dev-shell")]
+    const WINDOW_SIM_AVG_BUDGET_MS_F64: f64 = 8.0;
+    #[cfg(feature = "dev-shell")]
+    const WINDOW_SIM_P99_BUDGET_MS_F64: f64 = 16.0;
+    #[cfg(feature = "dev-shell")]
+    const WINDOW_HITCH_BUDGET_MS_F64: f64 = 100.0;
+    #[cfg(feature = "dev-shell")]
+    const WINDOW_MEMORY_BUDGET_MB_F64: f64 = 1024.0;
+    #[cfg(feature = "dev-shell")]
+    const WINDOW_COLD_START_BUDGET_S_F64: f64 = 5.0;
+    #[cfg(feature = "dev-shell")]
+    const WINDOW_TICK_COUNT_U64: u64 = 42;
+    #[cfg(feature = "dev-shell")]
+    const WINDOW_ELAPSED_S_F64: f64 = 2.1;
+    #[cfg(feature = "dev-shell")]
+    const WINDOW_ALTITUDE_M_F64: f64 = 250_000.0;
 
     fn smoke_shell() -> Shell {
         let Ok(shell) = Shell::new() else {
@@ -1265,5 +1568,151 @@ mod tests {
             shell.observe_snapshot(&bad),
             Err(ShellError::Inspect(_))
         ));
+    }
+
+    /// Build an orbit snapshot for window flight tests.
+    ///
+    /// Available only with the non-default `dev-shell` feature.
+    #[cfg(feature = "dev-shell")]
+    fn window_test_snapshot() -> engine::inspect::SimSnapshot {
+        use crate::inspect_view::{
+            INSPECT_DROP_NONE_U8, INSPECT_FRAME_DEPTH_M1_U8, INSPECT_FRAME_ORBIT_U8,
+            INSPECT_MARK_SHIP_POINT_U8, INSPECT_REGIME_ORBIT_U8, INSPECT_WARP_X1_U8,
+        };
+        engine::inspect::SimSnapshot {
+            tick_count_u64: WINDOW_TICK_COUNT_U64,
+            elapsed_s_f64: WINDOW_ELAPSED_S_F64,
+            ship_epoch_s_f64: WINDOW_ELAPSED_S_F64,
+            master_seed_u64: 0x1234_ABCD_5678_EF90,
+            stream_seed_u64: 9,
+            snapshot_hash_u64: 0xDEAD_BEEF_0000_4321,
+            position_m_f64: [3_639_500.0, 0.0, 0.0],
+            velocity_mps_f64: [0.0, 3_400.0, 0.0],
+            drag_mps2_f64: [0.0, 0.0, 0.0],
+            vel_dir_f64: [0.0, 1.0, 0.0],
+            altitude_m_f64: WINDOW_ALTITUDE_M_F64,
+            speed_mps_f64: 3_400.0,
+            pressure_pa_f64: 0.0,
+            temperature_k_f64: 210.0,
+            density_kg_m3_f64: 0.0,
+            heat_flux_w_per_m2_f64: 0.0,
+            g_load_g_f64: 0.0,
+            semi_major_axis_m_f64: 3_639_500.0,
+            eccentricity_f64: 0.01,
+            inclination_rad_f64: 0.3,
+            raan_rad_f64: 0.7,
+            arg_periapsis_rad_f64: 0.5,
+            mean_anomaly_rad_f64: 1.0,
+            mu_m3_s2_f64: 4.282_837e13,
+            pick_altitude_m_f64: 249_000.0,
+            pick_range_m_f64: 1_000.0,
+            frame_body_id_u32: 1,
+            parent_body_id_u32: 0,
+            pick_body_id_u32: 1,
+            pick_cell_x_i32: 3,
+            pick_cell_y_i32: -2,
+            warp_code_u8: INSPECT_WARP_X1_U8,
+            drop_reason_u8: INSPECT_DROP_NONE_U8,
+            warp_flags_u8: 3,
+            regime_u8: INSPECT_REGIME_ORBIT_U8,
+            frame_level_u8: INSPECT_FRAME_ORBIT_U8,
+            frame_depth_u8: INSPECT_FRAME_DEPTH_M1_U8,
+            elements_valid_u8: 1,
+            pick_valid_u8: 1,
+            mark_kind_u8: INSPECT_MARK_SHIP_POINT_U8,
+            _pad_u8: [0_u8; 3],
+        }
+    }
+
+    #[cfg(feature = "dev-shell")]
+    #[test]
+    fn desktop_window_opens_ticker_only_blind() {
+        let Ok(mut window) = DesktopWindow::open() else {
+            panic!("desktop window must open")
+        };
+        assert_eq!(window.mode(), ShellInputMode::Passthrough);
+        assert_eq!(window.config().preset(), DesktopPreset::TickerOnly);
+        assert!(window.visibility().shows_top_bar());
+        assert!(!window.visibility().shows_left_panel());
+        assert!(!window.visibility().shows_right_panel());
+        assert!(!window.visibility().shows_bottom_tabs());
+        assert!(!window.is_closed());
+        assert!((window.draw_cost_ms_f64() - 0.0).abs() < FRACTION_TOL_F64);
+        let readouts = window.tester_readouts();
+        assert_eq!(readouts.tick_count_u64, 0);
+        assert_eq!(window.handle_key(RouterKey::F3), ShellInputMode::Focused);
+        assert_eq!(window.mode(), ShellInputMode::Focused);
+        window.shell_mut().top_bar_mut().pause();
+        assert!(window.shell().top_bar().is_paused());
+    }
+
+    #[cfg(feature = "dev-shell")]
+    #[test]
+    fn desktop_window_flies_descent_via_readouts() {
+        use crate::budget::BudgetDenominators;
+        let Ok(mut window) = DesktopWindow::open() else {
+            panic!("desktop window must open")
+        };
+        let snapshot = window_test_snapshot();
+        assert!(
+            window.observe_snapshot(&snapshot).is_ok(),
+            "window snapshot must observe"
+        );
+        let readouts = window.tester_readouts();
+        assert_eq!(readouts.tick_count_u64, WINDOW_TICK_COUNT_U64);
+        assert!(
+            (readouts.altitude_m_f64 - WINDOW_ALTITUDE_M_F64).abs() < FRACTION_TOL_F64,
+            "window readouts must carry the snapshot altitude"
+        );
+        assert!(readouts.elements_valid_bool);
+        assert_eq!(
+            readouts.regime_label,
+            window.shell().inspect().regime_label()
+        );
+        window.set_preset(DesktopPreset::Descent);
+        assert_eq!(window.config().preset(), DesktopPreset::Descent);
+        assert!(window.visibility().shows_top_bar());
+        assert!(window.visibility().shows_left_panel());
+        assert!(window.visibility().shows_bottom_tabs());
+        assert!(!window.visibility().shows_right_panel());
+        assert_eq!(
+            window.shell().bottom_tabs().selected(),
+            crate::bottom::BottomTab::Continuity
+        );
+        let Ok(budgets) = BudgetDenominators::new(
+            WINDOW_FRAME_BUDGET_MS_F64,
+            WINDOW_SIM_AVG_BUDGET_MS_F64,
+            WINDOW_SIM_P99_BUDGET_MS_F64,
+            WINDOW_HITCH_BUDGET_MS_F64,
+            WINDOW_MEMORY_BUDGET_MB_F64,
+            WINDOW_COLD_START_BUDGET_S_F64,
+        ) else {
+            panic!("window budgets must build")
+        };
+        let ctx = egui::Context::default();
+        let mut draw_result: Option<Result<ShellAction, ShellError>> = None;
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            draw_result =
+                Some(window.draw_measured(&ctx, ui, WINDOW_FRAME_BUDGET_MS_F64, budgets, false));
+        });
+        // Headless test has no renderer; the OS window step applies texture deltas.
+        output.textures_delta.clear();
+        let Some(result) = draw_result else {
+            panic!("window draw must run")
+        };
+        assert!(result.is_ok(), "window draw must record cost");
+        let draw_ms_f64 = window.draw_cost_ms_f64();
+        assert!(draw_ms_f64.is_finite(), "window cost must stay finite");
+        assert!(draw_ms_f64 >= 0.0, "window cost must stay non-negative");
+        assert!(
+            window.average_draw_ms_f64().is_finite(),
+            "window mean cost must stay finite"
+        );
+        window.set_preset(DesktopPreset::TickerOnly);
+        assert!(!window.visibility().shows_bottom_tabs());
+        window.request_close();
+        assert!(window.is_closed());
+        window.reopen();
+        assert!(!window.is_closed());
     }
 }

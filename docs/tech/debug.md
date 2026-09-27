@@ -2,7 +2,7 @@
 
 **Status:** Design for issue #14. Location `docs/tech/debug.md` is locked.
 **Spelling:** US English throughout (behavior, meters, kilometers, organize, color).
-**Last updated:** 2026-09-26.
+**Last updated:** 2026-09-27.
 **Scope:** Phone plus desktop shell for the stage-1 abstract-marks build in [mvp.md](../topics/mvp.md). Same shell on both; desktop is scaled up, never a separate shell.
 
 Gates and budgets live in [quality.md](quality.md). This file names constants only and does not duplicate gate tables.
@@ -131,6 +131,28 @@ Default desktop layout docks four regions around the game `CentralPanel`: top ba
 - Ticker-only: top bar alone with health ticker and badges. Minimal occlusion for pass/fail item 4 legibility runs.
 
 Preset choice is shell state only and never persists per [persistence.md](persistence.md).
+
+#### Tester shape (issue #44 step 4, desktop-first)
+
+The legibility tester is `DesktopTesterReadouts` in `crates/debug/src/shell.rs`:
+clocks, seven continuity channels, orbital elements, warp factor, and regime
+labels only. It holds no vectors, no seeds, no hashes, and no picks; burns and
+handoffs gate on these fields alone (`desktop_tester_readouts`, also surfaced
+as `tester_readouts` on the window). The window assembly is `DesktopWindow`
+over one `Shell` plus `DesktopWindowConfig`: opens ticker-only and blind,
+switches to the Descent preset for handoff watching, draws through the existing
+headless egui context, and records shell draw cost on every draw. The OS window
+(winit event loop plus wgpu surface plus egui-wgpu renderer) lands in a later
+step; `winit` is not in `Cargo.lock`. Desktop gate for code is PASS:
+headless sim smoke PASS plus DesktopTester AC4a PASS
+(`tests/legibility_descent.rs`, 5 tests) plus window-assembly headless PASS
+(`desktop_window_flies_descent_via_readouts`, `shell_draw=ok`, `desktop_tester`
+smoke line) plus desktop budget math in `tests/budget_desktop.rs` via headless
+timing against the named budgets. The reference-phone sustained run stays OPEN,
+postponed per user direction; no phone measurement is claimed here. Budget
+fractions cite `FRAME_BUDGET_MS`, `SIM_TICK_AVG_MS`, `SIM_TICK_P99_MS`,
+`SURFACE_HITCH_P95_MS`, `MEMORY_CEILING_MB`, and `COLD_START_S` by name only;
+gates live in [quality.md](quality.md).
 
 ### 6.2 Phone portrait
 
