@@ -352,7 +352,10 @@ impl BudgetStrip {
                             percent = status.fraction_percent_f64(),
                             band = status.level().label()
                         ),
-                    );
+                    )
+                    .on_hover_text(format!(
+                        "{name} budget {budget_f64:.3} {unit}; raw value {value_f64:.6}"
+                    ));
                 }
                 Err(error) => {
                     ui.label(format!("budget {name} error: {error}"));

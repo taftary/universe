@@ -42,6 +42,19 @@ impl BottomTab {
         }
     }
 
+    /// Return the tab tooltip.
+    ///
+    /// Available only with the non-default `dev-shell` feature.
+    #[cfg(feature = "dev-shell")]
+    #[must_use]
+    pub const fn tooltip(self) -> &'static str {
+        match self {
+            Self::Continuity => "readout curves with handoff before/after/delta markers",
+            Self::Budget => "cost fractions of named budgets with bands",
+            Self::Log => "bounded tracing ring with level and module filters",
+        }
+    }
+
     /// Map a phone tab onto the bottom registry.
     ///
     /// Returns none for tabs outside the Phase B slice.
@@ -129,7 +142,8 @@ impl BottomTabs {
     pub fn draw(&mut self, ui: &mut egui::Ui, content: &BottomDraw<'_>) {
         ui.horizontal(|ui| {
             for tab in BottomTab::ALL {
-                ui.selectable_value(&mut self.selected, tab, tab.label());
+                ui.selectable_value(&mut self.selected, tab, tab.label())
+                    .on_hover_text(tab.tooltip());
             }
         });
         match self.selected {

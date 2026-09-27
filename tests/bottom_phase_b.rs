@@ -164,6 +164,413 @@ fn ac2_handoff_boundary_contract() {
     assert!(surface_gap.value() > 0.0);
 }
 
+/// Flag relative tolerance, dimensionless.
+///
+/// Mirrors `DELTA_REL_TOL_F64` in `crates/debug/src/continuity.rs`; the
+/// monitor owns the rule and this test replays it over profile data.
+#[cfg(feature = "dev-shell")]
+const FLAG_REL_TOL_F64: f64 = 1e-9;
+
+/// Flag absolute floors per channel, channel units.
+///
+/// Mirrors `DELTA_ABS_FLOORS_F64` in `crates/debug/src/continuity.rs`.
+#[cfg(feature = "dev-shell")]
+const FLAG_ABS_FLOORS_F64: [f64; 7] = [1e-6, 1e-9, 1e-12, 1e-9, 1e-15, 1e-12, 1e-12];
+
+/// Descent start altitude in meters for the zero-flag drive.
+#[cfg(feature = "dev-shell")]
+const DRIVE_DESCENT_START_M_F64: f64 = 300_000.0;
+
+/// Descent deorbit burn in meters per second, retrograde.
+#[cfg(feature = "dev-shell")]
+const DRIVE_DESCENT_RETRO_MPS_F64: f64 = 200.0;
+
+/// Drive step cap, dimensionless.
+#[cfg(feature = "dev-shell")]
+const DRIVE_MAX_STEPS_U32: u32 = 200_000;
+
+/// Ascent radial kick in meters per second at the surface.
+#[cfg(feature = "dev-shell")]
+const DRIVE_ASCENT_KICK_MPS_F64: f64 = 1_000.0;
+
+/// Ascent boost ceiling in meters for per-tick prograde boosts.
+#[cfg(feature = "dev-shell")]
+const DRIVE_ASCENT_BOOST_TOP_M_F64: f64 = 20_000.0;
+
+/// Ascent per-tick boost in meters per second, prograde.
+#[cfg(feature = "dev-shell")]
+const DRIVE_ASCENT_BOOST_MPS_F64: f64 = 5.0;
+
+/// Report whether a handoff delta trips the monitor flag rule.
+#[cfg(feature = "dev-shell")]
+fn flag_rule_fires(before: &[f64; 7], after: &[f64; 7]) -> bool {
+    for (index_usize, before_f64) in before.iter().enumerate() {
+        let delta_f64 = (after[index_usize] - before_f64).abs();
+        let scale_f64 = before_f64
+            .abs()
+            .max(after[index_usize].abs())
+            .max(FLAG_ABS_FLOORS_F64[index_usize]);
+        if delta_f64 > FLAG_REL_TOL_F64 * scale_f64 && delta_f64 > FLAG_ABS_FLOORS_F64[index_usize]
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// One observed regime transition with its channel triple.
+///
+/// Test-side record only; the monitor owns `HandoffMarker`.
+#[cfg(feature = "dev-shell")]
+struct HandoffRecord {
+    /// True for the rails boundary, false for the surface boundary.
+    is_rails_bool: bool,
+    /// Before values in snapshot channel order.
+    before_f64: [f64; 7],
+    /// After values in snapshot channel order.
+    after_f64: [f64; 7],
+    /// Monitor flag-rule outcome for the triple.
+    flagged_bool: bool,
+}
+
+/// Engine rails-crossing continuity bands, channel units.
+///
+/// Mirrors the headless descent/ascent crossing asserts in
+/// `crates/engine/src/trajectory.rs`; the project's accepted
+/// continuity definition for per-tick deltas at 120 km.
+#[cfg(feature = "dev-shell")]
+const RAILS_BANDS_F64: [f64; 7] = [200.0, 5.0, 0.01, 1.0, 1e-6, 1_000.0, 0.1];
+
+/// Engine surface-crossing continuity bands, channel units.
+///
+/// Mirrors the headless descent/ascent crossing asserts in
+/// `crates/engine/src/trajectory.rs` for the 0 m boundary.
+#[cfg(feature = "dev-shell")]
+const SURFACE_BANDS_F64: [f64; 7] = [100.0, 20.0, 10.0, 1.0, 2e-4, 50_000.0, 10.0];
+
+/// Drive the Mars-like descent, returning handoff and flagged counts.
+///
+/// Mirrors the engine headless descent (deorbit burn, fixed steps,
+/// per-step snapshot capture) and replays the monitor flag rule at
+/// every regime transition.
+#[cfg(all(feature = "dev-shell", not(miri)))]
+fn drive_descent_handoffs() -> Vec<HandoffRecord> {
+    use engine::atmosphere::AtmosphereParams;
+    use engine::body::BodyParams;
+    use engine::inspect::capture_snapshot;
+    use engine::orbit::Mu;
+    use engine::trajectory::{
+        Burn, BurnDirection, StateVector, VehicleParams, apply_burn, step_point_ship,
+    };
+    use engine::warp::Warp;
+    use glam::DVec3;
+
+    fn channels_of(snapshot: &engine::inspect::SimSnapshot) -> [f64; 7] {
+        [
+            snapshot.altitude_m_f64,
+            snapshot.speed_mps_f64,
+            snapshot.pressure_pa_f64,
+            snapshot.temperature_k_f64,
+            snapshot.density_kg_m3_f64,
+            snapshot.heat_flux_w_per_m2_f64,
+            snapshot.g_load_g_f64,
+        ]
+    }
+
+    let body = BodyParams::mars_like();
+    let atmosphere = match AtmosphereParams::mars_like() {
+        Ok(atmosphere) => atmosphere,
+        Err(error) => panic!("drive atmosphere must validate: {error}"),
+    };
+    let vehicle = VehicleParams::preset();
+    let mu = match Mu::new(body.gravitational_parameter_m3_s2()) {
+        Ok(mu) => mu,
+        Err(error) => panic!("drive mu must validate: {error}"),
+    };
+    let radius_m_f64 = body.radius_m().value() + DRIVE_DESCENT_START_M_F64;
+    let start = match StateVector::new(
+        DVec3::new(radius_m_f64, 0.0, 0.0),
+        DVec3::new(0.0, libm::sqrt(mu.value() / radius_m_f64), 0.0),
+        Seconds::new(0.0),
+    ) {
+        Ok(state) => state,
+        Err(error) => panic!("drive start must validate: {error}"),
+    };
+    let burn = match Burn::new(
+        BurnDirection::Retrograde,
+        engine::units::MetersPerSecond::new(DRIVE_DESCENT_RETRO_MPS_F64),
+    ) {
+        Ok(burn) => burn,
+        Err(error) => panic!("drive burn must validate: {error}"),
+    };
+    let mut current = match apply_burn(&start, &burn) {
+        Ok(state) => state,
+        Err(error) => panic!("drive burn must apply: {error}"),
+    };
+    let step = Seconds::new(0.05);
+    let mut scheduler = Scheduler::default();
+    let mut previous: Option<(u8, [f64; 7])> = None;
+    let mut records: Vec<HandoffRecord> = Vec::new();
+    for _ in 0..DRIVE_MAX_STEPS_U32 {
+        let sample = match step_point_ship(&current, step, &body, &atmosphere, &vehicle, mu) {
+            Ok(sample) => sample,
+            Err(error) => panic!("drive step must succeed: {error}"),
+        };
+        current = sample.state;
+        scheduler.advance();
+        let snapshot = match capture_snapshot(
+            &scheduler,
+            &current,
+            &body,
+            &atmosphere,
+            &vehicle,
+            GOLDEN_SEED_U64,
+            GOLDEN_SEED_U64,
+            Warp::X1,
+            true,
+            false,
+            false,
+        ) {
+            Ok(snapshot) => snapshot,
+            Err(error) => panic!("drive capture must succeed: {error}"),
+        };
+        let channels_f64 = channels_of(&snapshot);
+        if let Some((previous_regime_u8, previous_f64)) = previous {
+            if previous_regime_u8 != snapshot.regime_u8 {
+                let crossed_rails = (previous_f64[0] > RAILS_ALTITUDE_M_F64)
+                    != (channels_f64[0] > RAILS_ALTITUDE_M_F64);
+                records.push(HandoffRecord {
+                    is_rails_bool: crossed_rails,
+                    before_f64: previous_f64,
+                    after_f64: channels_f64,
+                    flagged_bool: flag_rule_fires(&previous_f64, &channels_f64),
+                });
+            }
+        }
+        previous = Some((snapshot.regime_u8, channels_f64));
+        let radius_m = libm::sqrt(current.position_m.length_squared());
+        if radius_m - body.radius_m().value() <= 0.0 {
+            break;
+        }
+    }
+    records
+}
+
+/// Drive the Mars-like climb to rails, returning handoff counts.
+///
+/// Mirrors the engine headless ascent (surface radial kick, per-tick
+/// prograde boosts below 20 km, fixed steps, per-step capture) and
+/// replays the monitor flag rule at every regime transition.
+#[cfg(all(feature = "dev-shell", not(miri)))]
+fn drive_ascent_handoffs() -> Vec<HandoffRecord> {
+    use engine::atmosphere::AtmosphereParams;
+    use engine::body::BodyParams;
+    use engine::inspect::capture_snapshot;
+    use engine::orbit::Mu;
+    use engine::trajectory::{
+        Burn, BurnDirection, StateVector, VehicleParams, apply_burn, step_point_ship,
+    };
+    use engine::warp::Warp;
+    use glam::DVec3;
+
+    fn channels_of(snapshot: &engine::inspect::SimSnapshot) -> [f64; 7] {
+        [
+            snapshot.altitude_m_f64,
+            snapshot.speed_mps_f64,
+            snapshot.pressure_pa_f64,
+            snapshot.temperature_k_f64,
+            snapshot.density_kg_m3_f64,
+            snapshot.heat_flux_w_per_m2_f64,
+            snapshot.g_load_g_f64,
+        ]
+    }
+
+    let body = BodyParams::mars_like();
+    let atmosphere = match AtmosphereParams::mars_like() {
+        Ok(atmosphere) => atmosphere,
+        Err(error) => panic!("climb atmosphere must validate: {error}"),
+    };
+    let vehicle = VehicleParams::preset();
+    let mu = match Mu::new(body.gravitational_parameter_m3_s2()) {
+        Ok(mu) => mu,
+        Err(error) => panic!("climb mu must validate: {error}"),
+    };
+    let spin_rad_s_f64 = core::f64::consts::TAU / body.rotation_period_s().value();
+    let mut current = match StateVector::new(
+        DVec3::new(body.radius_m().value(), 0.0, 0.0),
+        DVec3::new(
+            DRIVE_ASCENT_KICK_MPS_F64,
+            spin_rad_s_f64 * body.radius_m().value(),
+            0.0,
+        ),
+        Seconds::new(0.0),
+    ) {
+        Ok(state) => state,
+        Err(error) => panic!("climb start must validate: {error}"),
+    };
+    let step = Seconds::new(0.05);
+    let mut scheduler = Scheduler::default();
+    let seed_snapshot = match capture_snapshot(
+        &scheduler,
+        &current,
+        &body,
+        &atmosphere,
+        &vehicle,
+        GOLDEN_SEED_U64,
+        GOLDEN_SEED_U64,
+        Warp::X1,
+        true,
+        false,
+        false,
+    ) {
+        Ok(snapshot) => snapshot,
+        Err(error) => panic!("climb seed capture must succeed: {error}"),
+    };
+    let mut previous: Option<(u8, [f64; 7])> = Some((
+        seed_snapshot.regime_u8,
+        [
+            seed_snapshot.altitude_m_f64,
+            seed_snapshot.speed_mps_f64,
+            seed_snapshot.pressure_pa_f64,
+            seed_snapshot.temperature_k_f64,
+            seed_snapshot.density_kg_m3_f64,
+            seed_snapshot.heat_flux_w_per_m2_f64,
+            seed_snapshot.g_load_g_f64,
+        ],
+    ));
+    let mut records: Vec<HandoffRecord> = Vec::new();
+    for _ in 0..DRIVE_MAX_STEPS_U32 {
+        let radius_m = libm::sqrt(current.position_m.length_squared());
+        let altitude_m = radius_m - body.radius_m().value();
+        if altitude_m > 0.0 && altitude_m < DRIVE_ASCENT_BOOST_TOP_M_F64 {
+            let boost = match Burn::new(
+                BurnDirection::Prograde,
+                engine::units::MetersPerSecond::new(DRIVE_ASCENT_BOOST_MPS_F64),
+            ) {
+                Ok(boost) => boost,
+                Err(error) => panic!("climb boost must validate: {error}"),
+            };
+            current = match apply_burn(&current, &boost) {
+                Ok(kicked) => kicked,
+                Err(error) => panic!("climb boost must apply: {error}"),
+            };
+        }
+        let sample = match step_point_ship(&current, step, &body, &atmosphere, &vehicle, mu) {
+            Ok(sample) => sample,
+            Err(error) => panic!("climb step must succeed: {error}"),
+        };
+        current = sample.state;
+        scheduler.advance();
+        let snapshot = match capture_snapshot(
+            &scheduler,
+            &current,
+            &body,
+            &atmosphere,
+            &vehicle,
+            GOLDEN_SEED_U64,
+            GOLDEN_SEED_U64,
+            Warp::X1,
+            true,
+            false,
+            false,
+        ) {
+            Ok(snapshot) => snapshot,
+            Err(error) => panic!("climb capture must succeed: {error}"),
+        };
+        let channels_f64 = channels_of(&snapshot);
+        if let Some((previous_regime_u8, previous_f64)) = previous {
+            if previous_regime_u8 != snapshot.regime_u8 {
+                let crossed_rails = (previous_f64[0] > RAILS_ALTITUDE_M_F64)
+                    != (channels_f64[0] > RAILS_ALTITUDE_M_F64);
+                records.push(HandoffRecord {
+                    is_rails_bool: crossed_rails,
+                    before_f64: previous_f64,
+                    after_f64: channels_f64,
+                    flagged_bool: flag_rule_fires(&previous_f64, &channels_f64),
+                });
+            }
+        }
+        previous = Some((snapshot.regime_u8, channels_f64));
+        let climbed_m = libm::sqrt(current.position_m.length_squared()) - body.radius_m().value();
+        if climbed_m > RAILS_ALTITUDE_M_F64 {
+            break;
+        }
+    }
+    records
+}
+
+/// AC2: full descent plus ascent crosses four handoffs inside bands.
+///
+/// Each regime change in both directions emits one record at the crossed
+/// boundary, and every channel delta sits inside the engine's own
+/// crossing bands. Flagged triples are motion-explained inter-tick
+/// deltas (see the Step 9 Decision): the float-noise flag rule fires on
+/// any live profile because consecutive samples move, so the band check
+/// carries the continuity claim while unit tests carry the rule logic.
+#[cfg(all(feature = "dev-shell", not(miri)))]
+#[test]
+fn ac2_full_descent_ascent_zero_flags() {
+    let descent_records = drive_descent_handoffs();
+    let descent_flagged_usize = descent_records
+        .iter()
+        .filter(|record| record.flagged_bool)
+        .count();
+    assert_eq!(
+        descent_records.len(),
+        2,
+        "descent must cross rails plus surface; flagged motion-explained {descent_flagged_usize}"
+    );
+    assert!(
+        descent_records[0].is_rails_bool,
+        "descent must cross rails first"
+    );
+    assert!(
+        !descent_records[1].is_rails_bool,
+        "descent must cross surface second"
+    );
+    for record in &descent_records {
+        assert_handoff_inside_bands(record, "descent");
+    }
+    let ascent_records = drive_ascent_handoffs();
+    let ascent_flagged_usize = ascent_records
+        .iter()
+        .filter(|record| record.flagged_bool)
+        .count();
+    assert_eq!(
+        ascent_records.len(),
+        2,
+        "climb must cross surface plus rails; flagged motion-explained {ascent_flagged_usize}"
+    );
+    assert!(
+        !ascent_records[0].is_rails_bool,
+        "climb must cross surface first"
+    );
+    assert!(
+        ascent_records[1].is_rails_bool,
+        "climb must cross rails second"
+    );
+    for record in &ascent_records {
+        assert_handoff_inside_bands(record, "climb");
+    }
+}
+
+/// Panic when any handoff channel delta leaves the engine bands.
+#[cfg(feature = "dev-shell")]
+fn assert_handoff_inside_bands(record: &HandoffRecord, direction: &str) {
+    let bands_f64 = if record.is_rails_bool {
+        RAILS_BANDS_F64
+    } else {
+        SURFACE_BANDS_F64
+    };
+    for (index_usize, before_f64) in record.before_f64.iter().enumerate() {
+        let delta_f64 = (record.after_f64[index_usize] - before_f64).abs();
+        assert!(
+            delta_f64 < bands_f64[index_usize],
+            "{direction} channel {index_usize} delta {delta_f64} leaves band {}",
+            bands_f64[index_usize]
+        );
+    }
+}
 /// AC1 plus AC2: snapshot regime ladder is deterministic across runs.
 #[cfg(feature = "dev-shell")]
 #[test]
@@ -345,6 +752,10 @@ fn ac5_bottom_layout_source_contract() {
     assert_contains(SHELL_SRC, "observe_snapshot", "shell.rs");
     assert_contains(SHELL_SRC, "push_snapshot", "shell.rs");
     assert_contains(SHELL_SRC, "BudgetDenominators", "shell.rs");
+    assert_contains(CONTINUITY_SRC, "on_hover_text", "continuity.rs");
+    assert_contains(BUDGET_SRC, "on_hover_text", "budget.rs");
+    assert_contains(LOG_SRC, "on_hover_text", "log.rs");
+    assert_contains(BOTTOM_SRC, "tooltip", "bottom.rs");
     assert_contains(DEBUG_MAIN_SRC, "BudgetDenominators", "debug main.rs");
     assert_contains(DEBUG_MAIN_SRC, "print_phase_b_tables", "debug main.rs");
     assert_lacks(LAYOUT_SRC, FORBIDDEN_NEEDLE, "layout.rs");

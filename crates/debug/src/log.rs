@@ -296,7 +296,8 @@ impl TraceLog {
             },
             tracy = tracy_connected_bool,
             entries = self.entries.len()
-        ));
+        ))
+        .on_hover_text("in-memory ring only; never persisted; excerpt hook serves Phase C export");
         let mut shown_usize = 0;
         if self.entries.len() < LOG_HISTORY_CAPACITY_ENTRIES_USIZE {
             for entry in self.entries.iter().rev() {

@@ -67,6 +67,26 @@ pub const CHANNEL_LABELS: [&str; CHANNEL_COUNT_USIZE] = [
     "g_load",
 ];
 
+/// Channel units for labels and tooltips.
+///
+/// Source: `docs/tech/debug.md` section 2 units rule.
+pub const CHANNEL_UNITS: [&str; CHANNEL_COUNT_USIZE] =
+    ["m", "m/s", "Pa", "K", "kg/m3", "W/m2", "g"];
+
+/// Channel source modules for tooltips.
+///
+/// Names the sim module each readout derives from, per section 4.3.
+/// Source: `docs/tech/debug.md` section 4.3 inspector sources.
+pub const CHANNEL_SOURCES: [&str; CHANNEL_COUNT_USIZE] = [
+    "trajectory",
+    "trajectory",
+    "atmo",
+    "atmo",
+    "atmo",
+    "trajectory",
+    "trajectory",
+];
+
 /// Orbit regime code, dimensionless.
 ///
 /// Source: `crates/engine/src/inspect.rs` `REGIME_ORBIT_U8`.
@@ -421,20 +441,16 @@ impl ContinuityMonitor {
     /// Return the latest sample when one exists.
     #[must_use]
     pub fn latest(&self) -> Option<PlotSample> {
-        if self.samples.is_empty() {
-            return None;
-        }
-        if self.samples.len() < PLOT_HISTORY_CAPACITY_ENTRIES_USIZE {
-            return self.samples.last().copied();
-        }
-        let newest_index_usize = self
-            .next_index_usize
-            .checked_add(PLOT_HISTORY_CAPACITY_ENTRIES_USIZE)
-            .and_then(|sum_usize| sum_usize.checked_sub(1))
-            .map_or(0, |sum_usize| {
-                sum_usize % PLOT_HISTORY_CAPACITY_ENTRIES_USIZE
-            });
-        self.samples.get(newest_index_usize).copied()
+        self.ordered().last().copied()
+    }
+
+    /// Iterate samples oldest-first without allocating.
+    ///
+    /// Splits the ring at the write index so a full ring reads oldest
+    /// first and a filling ring reads insertion order; draw-time only.
+    fn ordered(&self) -> impl DoubleEndedIterator<Item = &PlotSample> + '_ {
+        let (head, tail) = self.samples.split_at(self.next_index_usize);
+        tail.iter().chain(head.iter())
     }
 
     /// Draw readout curves with handoff markers in one bottom tab.
@@ -448,18 +464,19 @@ impl ContinuityMonitor {
             ui.label("continuity: no samples yet");
             return;
         }
-        let ordered = self.ordered_for_draw();
-        let latest_elapsed_s_f64 = ordered.last().map_or(0.0, |sample| sample.elapsed_s_f64());
+        let latest_elapsed_s_f64 = self
+            .ordered()
+            .last()
+            .map_or(0.0, |sample| sample.elapsed_s_f64());
         let earliest_elapsed_s_f64 = latest_elapsed_s_f64 - self.window_s_f64;
         for (channel_usize, name) in CHANNEL_LABELS.iter().enumerate() {
             draw_channel_strip(
                 ui,
-                &ordered,
+                self,
                 channel_usize,
                 name,
                 earliest_elapsed_s_f64,
                 latest_elapsed_s_f64,
-                &self.markers,
             );
         }
         ui.label(format!(
@@ -520,19 +537,6 @@ impl ContinuityMonitor {
         }
         self.markers.push(marker);
     }
-
-    /// Collect samples oldest-first for draw without allocation past warmup.
-    #[cfg(feature = "dev-shell")]
-    fn ordered_for_draw(&self) -> Vec<PlotSample> {
-        let mut ordered = Vec::with_capacity(self.samples.len());
-        if self.samples.len() < PLOT_HISTORY_CAPACITY_ENTRIES_USIZE {
-            ordered.extend_from_slice(&self.samples);
-        } else {
-            ordered.extend_from_slice(&self.samples[self.next_index_usize..]);
-            ordered.extend_from_slice(&self.samples[..self.next_index_usize]);
-        }
-        ordered
-    }
 }
 
 impl Default for ContinuityMonitor {
@@ -558,25 +562,34 @@ fn unit_ratio_to_f32(ratio_f64: f64) -> f32 {
 /// Draw one channel strip with its handoff lines.
 ///
 /// Decimates the curve to screen pixels and skips samples outside the
-/// window. Available only with the non-default `dev-shell` feature.
+/// window. Iterates the monitor ring twice and allocates nothing.
+/// Available only with the non-default `dev-shell` feature.
 #[cfg(feature = "dev-shell")]
 fn draw_channel_strip(
     ui: &mut egui::Ui,
-    ordered: &[PlotSample],
+    monitor: &ContinuityMonitor,
     channel_usize: usize,
     name: &str,
     earliest_elapsed_s_f64: f64,
     latest_elapsed_s_f64: f64,
-    markers: &[HandoffMarker],
 ) {
     use crate::theme::{BASE_TEXT_RGB_U8, BUDGET_OVER_RGB_U8};
-    let latest_value_f64 = ordered
+    let latest_value_f64 = monitor
+        .ordered()
         .last()
         .map_or(0.0, |sample| sample.channels_f64()[channel_usize]);
+    let latest_tick_u64 = monitor
+        .ordered()
+        .last()
+        .map_or(0, |sample| sample.tick_count_u64());
     ui.label(format!(
-        "{name} latest={value:.6} tick={tick}",
-        value = latest_value_f64,
-        tick = ordered.last().map_or(0, |sample| sample.tick_count_u64())
+        "{name} latest={latest_value_f64:.6} tick={latest_tick_u64}"
+    ))
+    .on_hover_text(format!(
+        "{name} in {unit}; source {module}; tick {tick}",
+        unit = CHANNEL_UNITS[channel_usize],
+        module = CHANNEL_SOURCES[channel_usize],
+        tick = latest_tick_u64
     ));
     let (rect, _) = ui.allocate_exact_size(
         egui::vec2(ui.available_width(), PLOT_STRIP_HEIGHT_PT_F32),
@@ -593,12 +606,12 @@ fn draw_channel_strip(
         BUDGET_OVER_RGB_U8.green_u8,
         BUDGET_OVER_RGB_U8.blue_u8,
     );
-    let (min_f64, max_f64) = channel_range_f64(ordered, channel_usize);
+    let (min_f64, max_f64) = channel_range_f64(monitor.ordered(), channel_usize);
     let span_f64 = (max_f64 - min_f64).max(1e-300);
     let time_span_f64 = (latest_elapsed_s_f64 - earliest_elapsed_s_f64).max(1e-9);
     let mut previous_point: Option<egui::Pos2> = None;
     let mut last_drawn_x_f32 = f32::NEG_INFINITY;
-    for sample in ordered {
+    for sample in monitor.ordered() {
         if sample.elapsed_s_f64() < earliest_elapsed_s_f64 {
             continue;
         }
@@ -619,7 +632,7 @@ fn draw_channel_strip(
         }
         previous_point = Some(point);
     }
-    for marker in markers {
+    for marker in monitor.markers() {
         if marker.elapsed_s_f64() < earliest_elapsed_s_f64
             || marker.elapsed_s_f64() > latest_elapsed_s_f64
         {
@@ -657,9 +670,12 @@ fn normalize_channels_f64(channels_f64: [f64; CHANNEL_COUNT_USIZE]) -> [f64; CHA
     normalized_f64
 }
 
-/// Range of one channel over ordered samples.
+/// Range of one channel over oldest-first samples.
 #[cfg(feature = "dev-shell")]
-fn channel_range_f64(ordered: &[PlotSample], channel_usize: usize) -> (f64, f64) {
+fn channel_range_f64<'a>(
+    ordered: impl Iterator<Item = &'a PlotSample>,
+    channel_usize: usize,
+) -> (f64, f64) {
     let mut min_f64 = f64::INFINITY;
     let mut max_f64 = f64::NEG_INFINITY;
     for sample in ordered {
