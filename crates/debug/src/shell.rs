@@ -34,6 +34,8 @@ use crate::budget::BudgetDenominators;
 use crate::determinism::{DeterminismDraw, DeterminismWindow, ReplayReport};
 #[cfg(feature = "dev-shell")]
 use engine::inspect::SimSnapshot;
+#[cfg(feature = "dev-shell")]
+use engine::regime::Regime;
 
 /// Shell assembly failures from the owned parts.
 ///
@@ -213,6 +215,64 @@ pub struct BundleIdentity {
     pub platform: String,
     /// Thermal tier label text.
     pub tier: String,
+}
+
+/// Desktop-tester readouts for legibility runs.
+///
+/// Copies only the AC4 legibility scalars from the inspect view:
+/// clocks, seven continuity channels, orbital elements, warp factor,
+/// and regime labels. Holds no vectors, no seeds, no hashes, and no
+/// picks; the tester gates burns and handoffs on these fields alone.
+/// Available only with the non-default `dev-shell` feature.
+#[cfg(feature = "dev-shell")]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DesktopTesterReadouts {
+    /// Tick count, dimensionless.
+    pub tick_count_u64: u64,
+    /// Elapsed sim time in seconds.
+    pub elapsed_s_f64: f64,
+    /// Ship epoch in seconds.
+    pub ship_epoch_s_f64: f64,
+    /// Altitude above surface in meters.
+    pub altitude_m_f64: f64,
+    /// Corotating speed in meters per second.
+    pub speed_mps_f64: f64,
+    /// Pressure in pascals.
+    pub pressure_pa_f64: f64,
+    /// Temperature in kelvin.
+    pub temperature_k_f64: f64,
+    /// Density in kilograms per cubic meter.
+    pub density_kg_m3_f64: f64,
+    /// Heat flux in watts per square meter.
+    pub heat_flux_w_per_m2_f64: f64,
+    /// G-load in g units, dimensionless.
+    pub g_load_g_f64: f64,
+    /// Semi-major axis in meters.
+    pub semi_major_axis_m_f64: f64,
+    /// Eccentricity, dimensionless.
+    pub eccentricity_f64: f64,
+    /// Inclination in radians.
+    pub inclination_rad_f64: f64,
+    /// Node longitude in radians.
+    pub raan_rad_f64: f64,
+    /// Argument of periapsis in radians.
+    pub arg_periapsis_rad_f64: f64,
+    /// Mean anomaly in radians.
+    pub mean_anomaly_rad_f64: f64,
+    /// Gravity parameter in cubic meters per second squared.
+    pub mu_m3_s2_f64: f64,
+    /// True when orbital elements are valid.
+    pub elements_valid_bool: bool,
+    /// Warp factor, dimensionless.
+    pub warp_factor_f64: f64,
+    /// Current regime for handoff detection.
+    pub regime: Regime,
+    /// Regime label for display.
+    pub regime_label: &'static str,
+    /// Auto-drop reason label for display.
+    pub drop_label: &'static str,
+    /// Frame level label for display.
+    pub frame_label: &'static str,
 }
 
 /// Debug shell assembly with run control, cost, input, and inspect.
@@ -676,6 +736,43 @@ impl Shell {
         self.last_snapshot = Some(*snapshot);
         self.inspect = view;
         Ok(())
+    }
+
+    /// Copy desktop-tester readouts from the inspect view.
+    ///
+    /// Reads only the allowed legibility getters: clocks, seven
+    /// continuity channels, orbital elements, warp factor, and regime
+    /// labels. Never touches vectors, seeds, hashes, or picks. Shell
+    /// state only. Available only with the non-default `dev-shell`
+    /// feature.
+    #[cfg(feature = "dev-shell")]
+    #[must_use]
+    pub const fn desktop_tester_readouts(&self) -> DesktopTesterReadouts {
+        DesktopTesterReadouts {
+            tick_count_u64: self.inspect.tick_count_u64(),
+            elapsed_s_f64: self.inspect.elapsed_s_f64(),
+            ship_epoch_s_f64: self.inspect.ship_epoch_s_f64(),
+            altitude_m_f64: self.inspect.altitude_m_f64(),
+            speed_mps_f64: self.inspect.speed_mps_f64(),
+            pressure_pa_f64: self.inspect.pressure_pa_f64(),
+            temperature_k_f64: self.inspect.temperature_k_f64(),
+            density_kg_m3_f64: self.inspect.density_kg_m3_f64(),
+            heat_flux_w_per_m2_f64: self.inspect.heat_flux_w_per_m2_f64(),
+            g_load_g_f64: self.inspect.g_load_g_f64(),
+            semi_major_axis_m_f64: self.inspect.semi_major_axis_m_f64(),
+            eccentricity_f64: self.inspect.eccentricity_f64(),
+            inclination_rad_f64: self.inspect.inclination_rad_f64(),
+            raan_rad_f64: self.inspect.raan_rad_f64(),
+            arg_periapsis_rad_f64: self.inspect.arg_periapsis_rad_f64(),
+            mean_anomaly_rad_f64: self.inspect.mean_anomaly_rad_f64(),
+            mu_m3_s2_f64: self.inspect.mu_m3_s2_f64(),
+            elements_valid_bool: self.inspect.elements_valid(),
+            warp_factor_f64: self.inspect.warp_factor_f64(),
+            regime: self.inspect.regime(),
+            regime_label: self.inspect.regime_label(),
+            drop_label: self.inspect.drop_label(),
+            frame_label: self.inspect.frame_label(),
+        }
     }
 
     /// Mark the shell closed via the close-shell button.

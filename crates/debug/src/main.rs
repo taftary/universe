@@ -736,6 +736,25 @@ fn print_phase_b_tables(shell: &mut shell::Shell) {
     }
 }
 
+/// Print desktop-tester readouts copied via the readouts-only API.
+///
+/// Available only with the non-default `dev-shell` feature.
+#[cfg(feature = "dev-shell")]
+fn print_desktop_tester_smoke(shell: &shell::Shell) {
+    let readouts = shell.desktop_tester_readouts();
+    println!(
+        "desktop_tester tick={tick} regime={regime} alt_m={alt} speed_mps={speed} elements_valid={valid} warp={warp}x drop={drop} frame={frame}",
+        tick = readouts.tick_count_u64,
+        regime = readouts.regime_label,
+        alt = readouts.altitude_m_f64,
+        speed = readouts.speed_mps_f64,
+        valid = readouts.elements_valid_bool,
+        warp = readouts.warp_factor_f64,
+        drop = readouts.drop_label,
+        frame = readouts.frame_label
+    );
+}
+
 /// Observe a smoke snapshot and run one headless shell draw.
 ///
 /// Available only with the non-default `dev-shell` feature.
@@ -756,13 +775,16 @@ fn print_dev_shell_snapshot_smoke(shell: &mut shell::Shell) {
     print_run_control_smoke(shell);
     let snapshot = dev_shell_smoke_snapshot();
     match shell.observe_snapshot(&snapshot) {
-        Ok(()) => println!(
-            "shell snapshot tick={tick} regime={regime} mark={mark} pick_valid={pick}",
-            tick = shell.inspect().tick_count_u64(),
-            regime = shell.inspect().regime_label(),
-            mark = shell.inspect().mark_label(),
-            pick = shell.inspect().pick_valid()
-        ),
+        Ok(()) => {
+            println!(
+                "shell snapshot tick={tick} regime={regime} mark={mark} pick_valid={pick}",
+                tick = shell.inspect().tick_count_u64(),
+                regime = shell.inspect().regime_label(),
+                mark = shell.inspect().mark_label(),
+                pick = shell.inspect().pick_valid()
+            );
+            print_desktop_tester_smoke(shell);
+        }
         Err(error) => println!("shell_snapshot_error={error}"),
     }
     print_console_smoke(shell);
