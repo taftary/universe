@@ -44,6 +44,12 @@ pub const LOG_HISTORY_CAPACITY_ENTRIES_USIZE: usize = 512;
 /// Source: `docs/tech/debug.md` section 8.
 pub const INPUT_RECORDER_CAPACITY_ENTRIES_USIZE: usize = 1_024;
 
+/// Hash-history reservation in entries at shell open.
+///
+/// One hash per observed frame, matching the plot-history reservation.
+/// Source: `docs/tech/debug.md` section 8.
+pub const HASH_HISTORY_CAPACITY_ENTRIES_USIZE: usize = 2_048;
+
 /// Top-bar visibility bit for dock presets.
 ///
 /// Source: `docs/tech/debug.md` section 6.1.
@@ -545,6 +551,8 @@ pub struct BufferPlan {
     log_history_entries_usize: usize,
     /// Input-recorder reservation in entries.
     input_recorder_entries_usize: usize,
+    /// Hash-history reservation in entries.
+    hash_history_entries_usize: usize,
 }
 
 impl BufferPlan {
@@ -555,6 +563,7 @@ impl BufferPlan {
             plot_history_entries_usize: PLOT_HISTORY_CAPACITY_ENTRIES_USIZE,
             log_history_entries_usize: LOG_HISTORY_CAPACITY_ENTRIES_USIZE,
             input_recorder_entries_usize: INPUT_RECORDER_CAPACITY_ENTRIES_USIZE,
+            hash_history_entries_usize: HASH_HISTORY_CAPACITY_ENTRIES_USIZE,
         }
     }
 
@@ -574,6 +583,12 @@ impl BufferPlan {
     #[must_use]
     pub const fn input_recorder_entries_usize(self) -> usize {
         self.input_recorder_entries_usize
+    }
+
+    /// Return the hash-history reservation in entries.
+    #[must_use]
+    pub const fn hash_history_entries_usize(self) -> usize {
+        self.hash_history_entries_usize
     }
 }
 
@@ -706,6 +721,10 @@ mod tests {
         assert_eq!(
             plan.input_recorder_entries_usize(),
             INPUT_RECORDER_CAPACITY_ENTRIES_USIZE
+        );
+        assert_eq!(
+            plan.hash_history_entries_usize(),
+            HASH_HISTORY_CAPACITY_ENTRIES_USIZE
         );
     }
 

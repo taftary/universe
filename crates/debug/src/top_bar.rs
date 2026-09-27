@@ -598,6 +598,25 @@ impl TopBarState {
         self.health = HealthStatus::Tainted;
     }
 
+    /// Start a fresh run with clean determinism state.
+    ///
+    /// Clears taint and returns the ticker to nominal; the caller
+    /// restarts the recorder and histories alongside.
+    pub const fn begin_run(&mut self) {
+        self.clean = true;
+        self.health = HealthStatus::Nominal;
+    }
+
+    /// Start a clean seed-plus-log replay.
+    ///
+    /// Clears taint and raises the replaying ticker; a full-hash match
+    /// promotes back to nominal through `set_health`, while a diverged
+    /// replay keeps taint plus the divergence flash.
+    pub const fn begin_replay(&mut self) {
+        self.clean = true;
+        self.health = HealthStatus::Replaying;
+    }
+
     /// Set the latest shell draw cost in milliseconds.
     ///
     /// Mirrors the meter latest for badge display without dev-shell.

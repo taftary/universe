@@ -48,6 +48,10 @@ D-009 locks in #34 Phase A as the egui 0.36.2 plus paired egui-wgpu render bridg
 
 Phase B draws continuity plots with egui Painter only, with no `egui_plot` lock. The bottom panel stays hand-placed tabs, with no `postcard` lock and no `egui_dock` lock. `Cargo.lock` is unchanged. Revisit D-010 or D-011 only with measured draw-cost evidence.
 
+### D-010/D-011 Phase C note (#38 Step 1)
+
+Phase C renders seed trees, hashes, and recorder rows as text and writes bug bundles as TOML plus CSV text, with no `egui_plot` lock. Bundle text needs no `postcard` lock and panels need no `egui_dock` lock. `Cargo.lock` is unchanged. Revisit D-010 or D-011 only with measured draw-cost evidence.
+
 ### Candidate decisions for #14 (design, not locked)
 
 Proposed in [tech/debug.md](tech/debug.md) for issue #14. Each locks at first use per dependency hygiene in [tech/standards.md](tech/standards.md).

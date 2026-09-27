@@ -20,6 +20,8 @@ workspace = true
 anyhow.workspace = true
 egui = { workspace = true, optional = true }
 egui-wgpu = { workspace = true, optional = true }
+glam.workspace = true
+libm.workspace = true
 mimalloc.workspace = true
 tracing.workspace = true
 universe-engine.workspace = true

@@ -6,7 +6,10 @@
 
 mod bottom;
 mod budget;
+mod console;
 mod continuity;
+mod determinism;
+mod export;
 mod input;
 mod inspect_view;
 mod layout;
@@ -15,6 +18,7 @@ mod shell;
 mod shell_cost;
 mod theme;
 mod top_bar;
+mod tweak;
 
 /// Demo tick count for the headless run.
 const DEFAULT_TICK_COUNT: u64 = 4;
@@ -228,10 +232,11 @@ fn print_layout_smoke() {
     }
     let buffers = layout::BufferPlan::shell_default();
     println!(
-        "buffers plot={plot} log={log} recorder={recorder} touch_pt={touch} plot_height_pt={height}",
+        "buffers plot={plot} log={log} recorder={recorder} hash={hash} touch_pt={touch} plot_height_pt={height}",
         plot = buffers.plot_history_entries_usize(),
         log = buffers.log_history_entries_usize(),
         recorder = buffers.input_recorder_entries_usize(),
+        hash = buffers.hash_history_entries_usize(),
         touch = layout::MIN_TOUCH_TARGET_PT_F32,
         height = layout::PLOT_MIN_HEIGHT_PT_F32
     );
@@ -693,6 +698,22 @@ fn print_phase_b_tables(shell: &mut shell::Shell) {
     for tier in budget::ThermalTier::ALL {
         println!("thermal_tier {label}", label = tier.label());
     }
+    for kind in [
+        tweak::TweakKind::Bool,
+        tweak::TweakKind::I64,
+        tweak::TweakKind::F64,
+        tweak::TweakKind::Str,
+        tweak::TweakKind::Enum,
+    ] {
+        println!("tweak_kind {label}", label = kind.label());
+    }
+    for entry in tweak::REGISTRY {
+        println!(
+            "registry {name} [{unit}]",
+            name = entry.name,
+            unit = entry.unit
+        );
+    }
     println!(
         "continuity empty={empty} samples={samples} log_empty={log_empty} log={log}",
         empty = shell.continuity().is_empty(),
@@ -721,6 +742,18 @@ fn print_phase_b_tables(shell: &mut shell::Shell) {
 #[cfg(feature = "dev-shell")]
 fn print_dev_shell_snapshot_smoke(shell: &mut shell::Shell) {
     print_phase_b_tables(shell);
+    let identity = shell::BundleIdentity {
+        created_utc: String::from("2026-09-27T00:00:00Z"),
+        app_version: String::from("0.1.0-smoke"),
+        platform: String::from("smoke-host"),
+        tier: String::from("medium"),
+    };
+    match shell.export_bundle_to(std::path::Path::new(""), &identity) {
+        Ok(_) => println!("export_unexpected_ok"),
+        Err(error) => println!("export_no_snapshot_error={error}"),
+    }
+    shell.begin_run(SMOKE_SEED_U64);
+    print_run_control_smoke(shell);
     let snapshot = dev_shell_smoke_snapshot();
     match shell.observe_snapshot(&snapshot) {
         Ok(()) => println!(
@@ -732,7 +765,21 @@ fn print_dev_shell_snapshot_smoke(shell: &mut shell::Shell) {
         ),
         Err(error) => println!("shell_snapshot_error={error}"),
     }
+    print_console_smoke(shell);
+    print_replay_smoke(shell);
     let ctx = egui::Context::default();
+    print_draw_export_smoke(shell, &ctx, &identity);
+}
+
+/// Draw the shell plus export plus replay-state smoke.
+///
+/// Available only with the non-default `dev-shell` feature.
+#[cfg(feature = "dev-shell")]
+fn print_draw_export_smoke(
+    shell: &mut shell::Shell,
+    ctx: &egui::Context,
+    identity: &shell::BundleIdentity,
+) {
     shell.set_visibility(layout::PanelVisibility::for_preset(
         layout::DesktopPreset::Descent,
     ));
@@ -774,7 +821,13 @@ fn print_dev_shell_snapshot_smoke(shell: &mut shell::Shell) {
         ),
         Err(error) => println!("trace_log_error={error}"),
     }
-    shell.bottom_tabs_mut().select(bottom::BottomTab::Budget);
+    shell.bottom_tabs_mut().select(bottom::BottomTab::Console);
+    shell.determinism_window_mut().open();
+    println!(
+        "window open={open} tab={tab}",
+        open = shell.determinism_window().is_open(),
+        tab = shell.bottom_tabs().selected().label()
+    );
     match budget::BudgetDenominators::new(
         SMOKE_FRAME_BUDGET_MS_F64,
         SMOKE_SIM_AVG_BUDGET_MS_F64,
@@ -785,23 +838,254 @@ fn print_dev_shell_snapshot_smoke(shell: &mut shell::Shell) {
     ) {
         Ok(budgets) => {
             let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
-                shell.draw(&ctx, ui, SMOKE_FRAME_BUDGET_MS_F64, budgets, false);
+                let action = shell.draw(ctx, ui, SMOKE_FRAME_BUDGET_MS_F64, budgets, false);
+                println!(
+                    "draw export_requested={export}",
+                    export = action.export_requested()
+                );
             });
             // Headless smoke has no renderer; Step 5 applies texture deltas.
             output.textures_delta.clear();
             println!(
-                "shell_draw=ok closed={closed} mode={mode} bottom={bottom} samples={samples} markers={markers} tier={tier} log={log}",
+                "shell_draw=ok closed={closed} mode={mode} bottom={bottom} samples={samples} markers={markers} tier={tier} log={log} report={report}",
                 closed = shell.is_closed(),
                 mode = shell.mode().label(),
                 bottom = shell.bottom_tabs().selected().label(),
                 samples = shell.continuity().len_usize(),
                 markers = shell.continuity().markers().len(),
                 tier = shell.budget_strip().thermal_tier().label(),
-                log = shell.trace_log().len_usize()
+                log = shell.trace_log().len_usize(),
+                report = shell
+                    .last_report()
+                    .map_or(0, determinism::ReplayReport::ticks_compared_u64)
             );
         }
         Err(error) => println!("shell_budgets_error={error}"),
     }
+    print_export_smoke(shell, identity);
+    shell.determinism_window_mut().close();
+    println!(
+        "window open={open}",
+        open = shell.determinism_window().is_open()
+    );
+    shell.top_bar_mut().begin_replay();
+    println!(
+        "replay health={health} clean={clean}",
+        health = shell.top_bar().health_label(),
+        clean = shell.top_bar().is_clean()
+    );
+}
+
+/// Print run-control hooks with recorder states.
+///
+/// Available only with the non-default `dev-shell` feature.
+#[cfg(feature = "dev-shell")]
+fn print_run_control_smoke(shell: &mut shell::Shell) {
+    use engine::warp::{Warp, WarpContext};
+    println!(
+        "run state={state} master={master:04x} clean={clean}",
+        state = shell.recorder().state().label(),
+        master = determinism::SeedTreeView::short_u16(shell.recorder().master_seed_u64()),
+        clean = shell.top_bar().is_clean()
+    );
+    shell.pause();
+    println!(
+        "paused={paused} recorder={state} entries={entries}",
+        paused = shell.top_bar().is_paused(),
+        state = shell.recorder().state().label(),
+        entries = shell.recorder().len_usize()
+    );
+    shell.resume();
+    shell.request_step();
+    match shell.request_warp(Warp::X100, WarpContext::cruise()) {
+        Ok(granted) => println!("warp granted={factor}x", factor = granted.factor()),
+        Err(error) => println!("warp_error={error}"),
+    }
+    println!(
+        "hash empty={empty} len={len} seed={master:04x}/{star:04x} recorder_empty={rec_empty}",
+        empty = shell.hash_ring().is_empty(),
+        len = shell.hash_ring().len_usize(),
+        master = determinism::SeedTreeView::short_u16(shell.seed_tree().master_seed_u64()),
+        star = determinism::SeedTreeView::short_u16(shell.seed_tree().gen_star_u64()),
+        rec_empty = shell.recorder().is_empty()
+    );
+    for kind in determinism::InputKind::ALL {
+        println!(
+            "input kind={label} code={code}",
+            label = kind.label(),
+            code = kind.code_u8()
+        );
+    }
+    match determinism::InputKind::from_code(3_u8) {
+        Ok(kind) => println!("input code 3={label}", label = kind.label()),
+        Err(error) => println!("input_code_error={error}"),
+    }
+}
+
+/// Run console lines and print the draft left staged.
+///
+/// Available only with the non-default `dev-shell` feature.
+#[cfg(feature = "dev-shell")]
+fn print_console_smoke(shell: &mut shell::Shell) {
+    for line in [
+        "get plots.window_s",
+        "seed",
+        "hash",
+        "set plots.window_s 30",
+        "set atmo.density_scale 1.5",
+        "warp 2",
+        "warp 9",
+        "load bundle/",
+        "replay log.csv",
+        "frobnicate now",
+    ] {
+        match shell.execute_console_line(line) {
+            Ok(()) => println!("console ok: {line}"),
+            Err(error) => println!("console err: {line}: {error}"),
+        }
+    }
+    match console::parse_command("get plots.window_s") {
+        Ok(command) => println!("command safe={safe}", safe = command.is_safe_read()),
+        Err(error) => println!("command_error={error}"),
+    }
+    match console::parse_command("set plots.window_s 30") {
+        Ok(command) => println!("command safe={safe}", safe = command.is_safe_read()),
+        Err(error) => println!("command_error={error}"),
+    }
+    shell.console_mut().push_history("get seed");
+    shell.console_mut().push_history("hash");
+    let history_len = shell.console_mut().history_len_usize();
+    let older_opt = shell.console_mut().history_older().map(str::to_string);
+    let newer_opt = shell.console_mut().history_newer().map(str::to_string);
+    println!("history len={history_len} older={older_opt:?} newer={newer_opt:?}");
+    match tweak::lookup_entry_id("plots.window_s") {
+        Ok(id_u16) => match shell.tweak_board().draft(id_u16) {
+            Ok(Some(draft)) => println!(
+                "draft entry={entry} bits={bits:016x} confirm={confirm:?}",
+                entry = draft.entry_id_u16(),
+                bits = draft.pending_bits_u64(),
+                confirm = shell.tweak_board().confirm_id_u16()
+            ),
+            Ok(None) => println!("draft none"),
+            Err(error) => println!("draft_error={error}"),
+        },
+        Err(error) => println!("draft_error={error}"),
+    }
+    shell.console_mut().input_line_mut().push_str("hash");
+    println!(
+        "console staged={len} output={output}",
+        len = shell.console_mut().input_line_mut().len(),
+        output = shell.console().output().len()
+    );
+    shell.console_mut().clear_input();
+    match tweak::lookup_entry_id("plots.window_s") {
+        Ok(id_u16) => match shell.tweak_board().committed_f64(id_u16) {
+            Ok(value_f64) => println!("committed window_s={value_f64}"),
+            Err(error) => println!("committed_error={error}"),
+        },
+        Err(error) => println!("committed_error={error}"),
+    }
+    match shell.recorder_mut().record(determinism::InputEntry::new(
+        99_u64,
+        determinism::InputKind::StepTick,
+        determinism::InputPayload::zero(),
+    )) {
+        Ok(()) => println!(
+            "recorder entries={entries}",
+            entries = shell.recorder().len_usize()
+        ),
+        Err(error) => println!("recorder_error={error}"),
+    }
+}
+
+/// Replay clean plus bad-warp logs and store the divergence.
+///
+/// Available only with the non-default `dev-shell` feature.
+#[cfg(feature = "dev-shell")]
+fn print_replay_smoke(shell: &mut shell::Shell) {
+    match determinism::replay(SMOKE_SEED_U64, SMOKE_SEED_U64, &[], &[]) {
+        Ok(report) => {
+            println!(
+                "replay clean ticks={ticks} match={matched}",
+                ticks = report.ticks_compared_u64(),
+                matched = matches!(report.status(), determinism::ReplayStatus::Match)
+            );
+            shell.set_last_report(report);
+        }
+        Err(error) => println!("replay_error={error}"),
+    }
+    let bad_inputs = [determinism::InputEntry::new(
+        2_u64,
+        determinism::InputKind::WarpRequest,
+        determinism::InputPayload::warp(9_u8, 0_u8),
+    )];
+    match determinism::replay(
+        SMOKE_SEED_U64,
+        SMOKE_SEED_U64,
+        &bad_inputs,
+        &[(2_u64, 0_u64)],
+    ) {
+        Ok(report) => {
+            match report.status() {
+                determinism::ReplayStatus::Diverged(record) => {
+                    println!(
+                        "replay diverged tick={tick} input={kind}",
+                        tick = record.tick_count_u64(),
+                        kind = record
+                            .input_at_tick()
+                            .map_or("none", |entry| entry.kind().label())
+                    );
+                }
+                determinism::ReplayStatus::Match => println!("replay_unexpected_match"),
+            }
+            shell.set_last_report(report);
+        }
+        Err(error) => println!("replay_error={error}"),
+    }
+}
+
+/// Export, verify, tamper, quarantine, and clean a smoke bundle.
+///
+/// Available only with the non-default `dev-shell` feature.
+#[cfg(feature = "dev-shell")]
+fn print_export_smoke(shell: &mut shell::Shell, identity: &shell::BundleIdentity) {
+    let root = std::env::temp_dir().join(format!("universe-phasec-smoke-{}", std::process::id()));
+    let bundle_dir = root.join("bundle");
+    match shell.export_bundle_to(&bundle_dir, identity) {
+        Ok(path) => {
+            println!("export ok path={path}", path = path.display());
+            for name in export::BUNDLE_FILE_NAMES {
+                println!(
+                    "bundle file {name} exists={exists}",
+                    exists = bundle_dir.join(name).exists()
+                );
+            }
+        }
+        Err(error) => println!("export_error={error}"),
+    }
+    let inputs_path = bundle_dir.join(export::INPUTS_FILE_NAME);
+    if let Ok(mut bytes) = std::fs::read(&inputs_path) {
+        bytes.push(b'x');
+        if std::fs::write(&inputs_path, &bytes).is_ok() {
+            match export::verify_bundle_hashes(&bundle_dir) {
+                Ok(()) => println!("verify_unexpected_ok"),
+                Err(error) => println!("verify_tamper_error={error}"),
+            }
+            match export::quarantine_bundle(&bundle_dir, 1, 2) {
+                Ok(path) => println!("quarantined={path}", path = path.display()),
+                Err(error) => println!("quarantine_error={error}"),
+            }
+        }
+    }
+    if std::fs::remove_dir_all(&root).is_err() {
+        println!("smoke_cleanup_missed");
+    }
+    shell.recorder_mut().stop_on_export();
+    println!(
+        "recorder state={state} entries={entries}",
+        state = shell.recorder().state().label(),
+        entries = shell.recorder().len_usize()
+    );
 }
 
 /// Build a dev-shell smoke snapshot with orbit defaults.

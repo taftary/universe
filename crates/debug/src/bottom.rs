@@ -10,14 +10,18 @@ use crate::layout::{DesktopPreset, PhoneTab};
 #[cfg(feature = "dev-shell")]
 use crate::budget::{BudgetDenominators, BudgetStrip};
 #[cfg(feature = "dev-shell")]
+use crate::console::Console;
+#[cfg(feature = "dev-shell")]
 use crate::continuity::ContinuityMonitor;
 #[cfg(feature = "dev-shell")]
 use crate::log::TraceLog;
+#[cfg(feature = "dev-shell")]
+use crate::tweak::TweakBoard;
 
 /// Bottom tab backed by one registry.
 ///
-/// Maps onto the `PhoneTab` plots, budget, and log slice; replay and
-/// console stay deferred to later phases.
+/// Maps onto the `PhoneTab` plots, budget, and log slice plus the
+/// console; replay and console stay deferred to later phases.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BottomTab {
     /// Continuity plots with handoff markers.
@@ -26,11 +30,13 @@ pub enum BottomTab {
     Budget,
     /// Tracing log with filters.
     Log,
+    /// Tweak board plus console over the registry.
+    Console,
 }
 
 impl BottomTab {
     /// All bottom tabs in registry order.
-    pub const ALL: [Self; 3] = [Self::Continuity, Self::Budget, Self::Log];
+    pub const ALL: [Self; 4] = [Self::Continuity, Self::Budget, Self::Log, Self::Console];
 
     /// Return the short tab label.
     #[must_use]
@@ -39,6 +45,7 @@ impl BottomTab {
             Self::Continuity => "plots",
             Self::Budget => "budget",
             Self::Log => "log",
+            Self::Console => "console",
         }
     }
 
@@ -52,12 +59,15 @@ impl BottomTab {
             Self::Continuity => "readout curves with handoff before/after/delta markers",
             Self::Budget => "cost fractions of named budgets with bands",
             Self::Log => "bounded tracing ring with level and module filters",
+            Self::Console => "tweak board plus command line over the registry",
         }
     }
 
     /// Map a phone tab onto the bottom registry.
     ///
-    /// Returns none for tabs outside the Phase B slice.
+    /// Returns none for tabs outside the Phase B slice. The phone
+    /// console lives inside the Replay tab, so `Console` maps back to
+    /// `Replay` instead.
     #[must_use]
     pub const fn from_phone_tab(tab: PhoneTab) -> Option<Self> {
         match tab {
@@ -75,6 +85,7 @@ impl BottomTab {
             Self::Continuity => PhoneTab::Plots,
             Self::Budget => PhoneTab::Budget,
             Self::Log => PhoneTab::Log,
+            Self::Console => PhoneTab::Replay,
         }
     }
 
@@ -102,6 +113,12 @@ pub struct BottomDraw<'a> {
     pub log: &'a TraceLog,
     /// Tracy connection flag supplied by the caller.
     pub tracy_connected_bool: bool,
+    /// Tweak board with drafts plus confirm state.
+    pub tweaks: &'a mut TweakBoard,
+    /// Console with input plus history plus output.
+    pub console: &'a mut Console,
+    /// Scheduler hold state for pause-only gating.
+    pub paused_bool: bool,
 }
 
 /// Bottom tab assembly with selection state.
@@ -139,7 +156,7 @@ impl BottomTabs {
     /// draws at a time on every device. Available only with the
     /// non-default `dev-shell` feature.
     #[cfg(feature = "dev-shell")]
-    pub fn draw(&mut self, ui: &mut egui::Ui, content: &BottomDraw<'_>) {
+    pub fn draw(&mut self, ui: &mut egui::Ui, content: BottomDraw<'_>) {
         ui.horizontal(|ui| {
             for tab in BottomTab::ALL {
                 ui.selectable_value(&mut self.selected, tab, tab.label())
@@ -150,6 +167,16 @@ impl BottomTabs {
             BottomTab::Continuity => content.monitor.draw(ui),
             BottomTab::Budget => content.strip.draw(ui, content.budgets),
             BottomTab::Log => content.log.draw(ui, content.tracy_connected_bool),
+            BottomTab::Console => {
+                let BottomDraw {
+                    tweaks,
+                    console,
+                    paused_bool,
+                    ..
+                } = content;
+                tweaks.draw(ui, paused_bool);
+                console.draw(ui);
+            }
         }
     }
 }
@@ -167,7 +194,7 @@ mod tests {
 
     #[test]
     fn registry_maps_phase_b_slice() {
-        assert_eq!(BottomTab::ALL.len(), 3);
+        assert_eq!(BottomTab::ALL.len(), 4);
         assert_eq!(
             BottomTab::from_phone_tab(PhoneTab::Plots),
             Some(BottomTab::Continuity)
@@ -184,6 +211,8 @@ mod tests {
         assert_eq!(BottomTab::from_phone_tab(PhoneTab::Run), None);
         assert_eq!(BottomTab::Continuity.to_phone_tab(), PhoneTab::Plots);
         assert!(BottomTab::Continuity.to_phone_tab().is_phase_b());
+        assert_eq!(BottomTab::Console.to_phone_tab(), PhoneTab::Replay);
+        assert_eq!(BottomTab::Console.label(), "console");
     }
 
     #[test]

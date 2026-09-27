@@ -391,6 +391,15 @@ impl ContinuityMonitor {
         Ok(())
     }
 
+    /// Clear samples plus markers, keeping reservations for reuse.
+    ///
+    /// No allocation; called on fresh runs outside the frame loop.
+    pub fn clear(&mut self) {
+        self.samples.clear();
+        self.markers.clear();
+        self.next_index_usize = 0;
+    }
+
     /// Push one sample, emitting a marker on regime change.
     ///
     /// Overwrites the oldest entry once full; no allocation after open.
