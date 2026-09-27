@@ -1216,6 +1216,8 @@ dependencies = [
  "anyhow",
  "egui",
  "egui-wgpu",
+ "glam",
+ "libm",
  "mimalloc",
  "tracing",
  "universe-engine",
