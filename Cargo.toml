@@ -20,7 +20,8 @@ rust-version = "1.95"
 [workspace.dependencies]
 # One source for versions (`docs/tech/standards.md`); caret within the locked
 # major lines (`docs/tech/stack.md`). `egui` plus `egui-wgpu` joined the used
-# set in #34 Phase A; `wgpu`, `winit`, `naga` join when render code lands.
+# set in #34 Phase A (`wgpu`, `naga` transitively); `winit` joins at first
+# use in #44 Step 5 (D-003).
 # Dev-shell `SimSnapshot` plain-data view (`bytemuck` `Pod`); D-row in Step 5.
 bytemuck = { version = "1", features = ["derive"] }
 glam = "0.33"
@@ -46,6 +47,11 @@ xxhash-rust = { version = "0.8", features = ["xxh3"] }
 # Deterministic cross-platform transcendentals for orbit math; see crates/engine/src/orbit.rs.
 # default-features=false disables the arch assembly so Miri passes and x86_64/AArch64 agree.
 libm = { version = "0.2", default-features = false }
+# D-003 first use (#44 Step 5): winit 0.30.13 locked in `universe-debug`
+# behind the non-default `dev-shell` feature. Default features; no extra
+# backends. Engine sim stays winit-free; main thread owns winit per
+# docs/tech/architecture.md.
+winit = "0.30.13"
 universe-engine = { path = "crates/engine" }
 universe-game = { path = "crates/game" }
 

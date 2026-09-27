@@ -11,7 +11,7 @@ path = "src/main.rs"
 required-features = ["dev-shell"]
 
 [features]
-dev-shell = ["dep:egui", "dep:egui-wgpu", "universe-engine/dev-shell"]
+dev-shell = ["dep:egui", "dep:egui-wgpu", "dep:winit", "universe-engine/dev-shell"]
 
 [lints]
 workspace = true
@@ -20,6 +20,10 @@ workspace = true
 anyhow.workspace = true
 egui = { workspace = true, optional = true }
 egui-wgpu = { workspace = true, optional = true }
+# D-003 first use (#44 Step 5): winit 0.30.13 window/event loop, debug-only
+# behind `dev-shell`. Default features; no extra backends. No window code
+# yet (Step 6); engine sim stays winit-free.
+winit = { workspace = true, optional = true }
 glam.workspace = true
 libm.workspace = true
 mimalloc.workspace = true
