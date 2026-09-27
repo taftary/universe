@@ -157,6 +157,20 @@ fractions cite `FRAME_BUDGET_MS`, `SIM_TICK_AVG_MS`, `SIM_TICK_P99_MS`,
 `SURFACE_HITCH_P95_MS`, `MEMORY_CEILING_MB`, and `COLD_START_S` by name only;
 gates live in [quality.md](quality.md).
 
+Step 7 headless-proven note (issue #44): `cargo test -p universe-debug
+--features dev-shell` holds 107 tests green (8 window unit tests) and the full
+`cargo test --features dev-shell` suite holds green; the no-flag binary prints
+`headless reason=missing --run-window; headless demo only` with `ticks=4` plus
+`shell_draw=ok` plus the `desktop_tester` smoke line and never opens a window.
+The `--run-window` display gate plus the ticker-only assembly plus the
+`draw_measured` cost hook are pinned by `tests/os_window_ticker.rs`; `cargo
+test` carries no flag so no test opens a window. Live window open stays
+UNPROVEN on display-less CI hosts: `--run-window` needs a display plus a
+working wgpu adapter (immediate `STATUS_ACCESS_VIOLATION` exit observed on a
+GPU-less Windows host). Validate live with
+`cargo run -p universe-debug --features dev-shell -- --run-window` on a
+display host and close the window to exit.
+
 ### 6.2 Phone portrait
 
 Phone uses the same panels with a different arrangement:
