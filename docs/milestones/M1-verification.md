@@ -39,3 +39,62 @@ Branch `task/42-m1-verification-release` at `2fb6829` (post-#40). Plan AC1-AC7 f
 ## Verdict
 
 PARTIAL READY for release. AC1, AC2, AC6 pass plus CI; AC4 DEFERRED to M2; AC3 on-device OPEN; AC7 OPEN (no tag, version still 0.1.0).
+
+## M2 blind-run protocol (AC4 legibility follow-up)
+
+Scope: human evidence for AC4, which stays DEFERRED in M1. No flight binary exists yet (`universe-debug` is a 4-tick smoke); this protocol runs on the first M2 flight binary.
+
+### Tester criteria
+
+- One tester who has not seen the build, seed, or controls before the run.
+- No coaching during the run. Observer answers only safety-stop questions (quit, pause).
+- Tester has normal phone familiarity and can operate one-handed on the reference phone.
+
+### Setup
+
+- Ticker-only preset per `docs/tech/debug.md` 6.1: top bar alone with health ticker and badges.
+- Shell otherwise closed (`Passthrough` mode); dev tag visible only for the observer's safety stop.
+- Reference phone, portrait, default brightness, sound/haptic on if implemented.
+- Clean seed recorded before start; input recorder and per-tick hashes running.
+
+### Task
+
+- Start: stable circular orbit above 120 km (vacuum, pressure exactly 0).
+- Descend: retro burn, coast, atmospheric entry, descent to the surface grid.
+- Touchdown: rest on grid within 0.5 m altitude and below 5 m/s vertical-equivalent velocity.
+- Return: ascend from the grid back to a closed orbit above 120 km.
+- Reversible at any moment without breaking sim state; warp auto-drops to 1x on entry, approach, and alarm per `docs/topics/mvp.md` 8.6.
+
+### Required readouts (all nine, from one model)
+
+1. Altitude above surface (m).
+2. Velocity magnitude and direction relative to surface (m/s).
+3. Orbital elements while in orbit.
+4. Ambient pressure (Pa).
+5. Ambient temperature (K).
+6. Air density (kg/m3).
+7. Heating proxy during entry.
+8. g-load.
+9. Mission elapsed time and current warp factor.
+
+Plot curves and handoff markers may be shown only if they are part of the player-facing readouts in the flight binary; no debug overlays, inspector, or console.
+
+### Record sheet
+
+| Field | Value |
+| --- | --- |
+| Seed (`master_seed_u64`) | |
+| Start tick / end tick (descent, ascent) | |
+| Input log (tick, kind, payload with units) | attached `inputs.csv` |
+| Per-tick hashes (`hashes.csv`, first-divergence tick if any) | attached |
+| Screenshots (orbit, entry, touchdown, re-orbit) | attached |
+| Warp auto-drops observed (entry / approach / alarm, yes/no each) | |
+| Touchdown altitude (m) and velocity (m/s) | |
+| Prompts given (none expected; list any) | |
+| Unprompted descent complete (yes/no) | |
+| Unprompted ascent complete (yes/no) | |
+| Tester quote on what each readout meant | |
+
+### Pass rule
+
+AC4 passes in M2 only if the unseen tester completes orbit to grid touchdown and grid back to orbit, both ways unprompted, using readouts alone. Any verbal hint, debug overlay, or missing readout fails the run; a second tester may retry once with the prompt logged.
