@@ -323,3 +323,7 @@ Only seeds and placed state persist per [persistence.md](persistence.md); proced
 - Performance: release profile `lto = "fat"`, `codegen-units = 1`, `overflow-checks = true`. Global allocator `mimalloc` in the binary. Fast hashers (`foldhash`) only for trusted internal keys; external-input keys use `SipHash`. Hot loops use struct-of-arrays and avoid pointer chasing. Shell plot, log, and recorder buffers are pre-sized at open under the [mvp.md](../topics/mvp.md) exemption; every performance-sensitive shell change states its measured cost in the issue.
 
 Related: [../README.md](../../README.md), [../specs.md](../specs.md), [../tech.md](../tech.md).
+
+## 13 FUTURE (tracked in #48)
+
+FUTURE (tracked in #48): phone sustained run on the reference phone against the budgets in [quality.md](quality.md), unseen-human blind run under the M2 protocol appendix in M1-verification.md, and tag v0.2.0 stay deferred. Until then the desktop software CPU fallback path is the dev path; the hardware Intel `request_device` fault is a known upstream driver fault (see section 6.1).
