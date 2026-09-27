@@ -11,7 +11,7 @@ path = "src/main.rs"
 required-features = ["dev-shell"]
 
 [features]
-dev-shell = ["dep:egui", "dep:egui-wgpu"]
+dev-shell = ["dep:egui", "dep:egui-wgpu", "universe-engine/dev-shell"]
 
 [lints]
 workspace = true

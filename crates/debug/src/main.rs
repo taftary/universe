@@ -4,7 +4,10 @@
 
 #![forbid(unsafe_code)]
 
+mod input;
+mod inspect_view;
 mod layout;
+mod shell;
 mod shell_cost;
 mod theme;
 mod top_bar;
@@ -65,6 +68,9 @@ fn main() -> anyhow::Result<()> {
     print_theme_smoke();
     print_layout_smoke();
     print_top_bar_smoke();
+    print_input_smoke();
+    print_inspect_smoke();
+    print_shell_smoke();
     Ok(())
 }
 
@@ -368,4 +374,320 @@ fn print_top_bar_coverage(bar: &mut top_bar::TopBarState) {
         tick = default_bar.tick_count_u64(),
         warp = default_bar.effective_factor_f64()
     );
+}
+
+/// Print input-router modes, gestures, routes, and pick tolerance.
+fn print_input_smoke() {
+    let mut router = input::InputRouter::new();
+    println!(
+        "input mode={label} passthrough={pass} tol_pt={tol}",
+        label = router.mode().label(),
+        pass = router.is_passthrough(),
+        tol = router.pick_tolerance_pt_f32()
+    );
+    for key in input::RouterKey::ALL {
+        let mode = router.on_key(key);
+        println!(
+            "input key={label} mode={mode}",
+            label = key.label(),
+            mode = mode.label()
+        );
+    }
+    router.open_modal();
+    println!(
+        "input modal open={open} focused={focused}",
+        open = router.is_modal_open(),
+        focused = router.is_focused()
+    );
+    router.close_modal();
+    println!("input modal open={open}", open = router.is_modal_open());
+    match router.on_dev_tag_long_press(input::DEV_TAG_LONG_PRESS_S_F64) {
+        Ok(mode) => println!("input long_press mode={mode}", mode = mode.label()),
+        Err(error) => println!("input long_press_error={error}"),
+    }
+    match router.on_dev_tag_long_press(0.1) {
+        Ok(mode) => println!("input short_press mode={mode}", mode = mode.label()),
+        Err(error) => println!("input short_press_error={error}"),
+    }
+    match router.on_dev_tag_long_press(f64::NAN) {
+        Ok(mode) => println!("input nan_press mode={mode}", mode = mode.label()),
+        Err(error) => println!("input nan_press_error={error}"),
+    }
+    let tapped = router.on_multi_finger_tap(input::THREE_FINGER_TAP_COUNT_U8);
+    println!("input three_finger mode={mode}", mode = tapped.label());
+    let ignored = router.on_multi_finger_tap(2);
+    println!("input two_finger mode={mode}", mode = ignored.label());
+    for wants_pointer in [false, true] {
+        for wants_keyboard in [false, true] {
+            let route = router.route(wants_pointer, wants_keyboard);
+            println!(
+                "input route wants_pointer={pointer} wants_keyboard={keyboard} route={route} shell={shell} game_copy={copy}",
+                pointer = wants_pointer,
+                keyboard = wants_keyboard,
+                route = route.label(),
+                shell = route.shell_consumes(),
+                copy = route.game_sees_copy()
+            );
+        }
+    }
+    match router.set_pick_tolerance(12.0) {
+        Ok(()) => println!(
+            "input tol set_pt={tol}",
+            tol = router.pick_tolerance_pt_f32()
+        ),
+        Err(error) => println!("input tol_error={error}"),
+    }
+    match router.set_pick_tolerance(f32::NAN) {
+        Ok(()) => println!("input tol_nan unexpected"),
+        Err(error) => println!("input tol_nan_error={error}"),
+    }
+}
+
+/// Print inspect-view scalars plus every snapshot code map.
+fn print_inspect_smoke() {
+    match inspect_view::InspectView::new(input::TAP_PICK_TOLERANCE_PT_F32) {
+        Ok(view) => {
+            println!(
+                "inspect tick={tick} elapsed_s={elapsed} warp_factor={warp} drop={drop} regime={regime} frame={frame} elements={elements} pick={pick} tol_pt={tol}",
+                tick = view.tick_count_u64(),
+                elapsed = view.elapsed_s_f64(),
+                warp = view.warp_factor_f64(),
+                drop = view.drop_label(),
+                regime = view.regime_label(),
+                frame = view.frame_label(),
+                elements = view.elements_valid(),
+                pick = view.pick_valid(),
+                tol = view.pick_tolerance_pt_f32()
+            );
+            println!(
+                "inspect clocks ship_epoch_s={epoch} master_seed={master} stream_seed={stream} hash={hash}",
+                epoch = view.ship_epoch_s_f64(),
+                master = view.master_seed_u64(),
+                stream = view.stream_seed_u64(),
+                hash = view.snapshot_hash_u64()
+            );
+            println!(
+                "inspect aero alt_m={alt} speed_mps={speed} p_pa={p} t_k={t} d_kg_m3={d} heat={heat} g={g}",
+                alt = view.altitude_m_f64(),
+                speed = view.speed_mps_f64(),
+                p = view.pressure_pa_f64(),
+                t = view.temperature_k_f64(),
+                d = view.density_kg_m3_f64(),
+                heat = view.heat_flux_w_per_m2_f64(),
+                g = view.g_load_g_f64()
+            );
+            println!(
+                "inspect elements axis_m={axis} ecc={ecc} incl_rad={incl} raan_rad={raan} arg_rad={arg} mean_rad={mean} mu={mu}",
+                axis = view.semi_major_axis_m_f64(),
+                ecc = view.eccentricity_f64(),
+                incl = view.inclination_rad_f64(),
+                raan = view.raan_rad_f64(),
+                arg = view.arg_periapsis_rad_f64(),
+                mean = view.mean_anomaly_rad_f64(),
+                mu = view.mu_m3_s2_f64()
+            );
+            println!(
+                "inspect frame warp_code={warp} regime={regime:?} body={body} parent={parent} depth={depth}",
+                warp = view.warp_code_u8(),
+                regime = view.regime(),
+                body = view.frame_body_id_u32(),
+                parent = view.parent_body_id_u32(),
+                depth = view.frame_depth_u8()
+            );
+            println!(
+                "inspect pick body={body} alt_m={alt} range_m={range} cell=({cx},{cy}) mark={mark}",
+                body = view.pick_body_id_u32(),
+                alt = view.pick_altitude_m_f64(),
+                range = view.pick_range_m_f64(),
+                cx = view.pick_cell().0,
+                cy = view.pick_cell().1,
+                mark = view.mark_label()
+            );
+            for code_u8 in [0_u8, 1, 2, 3, 4, 9] {
+                match inspect_view::InspectView::warp_for(code_u8) {
+                    Ok(warp) => println!(
+                        "inspect warp code={code_u8} factor={factor}",
+                        factor = warp.factor()
+                    ),
+                    Err(error) => println!("inspect warp code={code_u8} error={error}"),
+                }
+            }
+            for code_u8 in [0_u8, 1, 2, 3, 9] {
+                match inspect_view::InspectView::drop_label_for(code_u8) {
+                    Ok(drop) => println!("inspect drop code={code_u8} reason={drop}"),
+                    Err(error) => println!("inspect drop code={code_u8} error={error}"),
+                }
+            }
+            for code_u8 in [0_u8, 1, 2, 9] {
+                match inspect_view::InspectView::regime_label_for(code_u8) {
+                    Ok(regime) => println!("inspect regime code={code_u8} regime={regime}"),
+                    Err(error) => println!("inspect regime code={code_u8} error={error}"),
+                }
+            }
+            for level_u8 in [5_u8, 6, 7, 4] {
+                match inspect_view::InspectView::frame_label_for(level_u8) {
+                    Ok(frame) => println!("inspect frame level={level_u8} frame={frame}"),
+                    Err(error) => println!("inspect frame level={level_u8} error={error}"),
+                }
+            }
+            for kind_u8 in [0_u8, 1, 2, 3, 4, 5, 6, 7, 9] {
+                match inspect_view::InspectView::mark_label_for(kind_u8) {
+                    Ok(mark) => println!("inspect mark kind={kind_u8} mark={mark}"),
+                    Err(error) => println!("inspect mark kind={kind_u8} error={error}"),
+                }
+            }
+        }
+        Err(error) => println!("inspect_error={error}"),
+    }
+}
+
+/// Print shell assembly, cost hook, close flag, and gated draw.
+fn print_shell_smoke() {
+    match shell::Shell::new() {
+        Ok(mut shell) => {
+            println!(
+                "shell mode={mode} closed={closed} top={top} draw_ms={ms}",
+                mode = shell.mode().label(),
+                closed = shell.is_closed(),
+                top = shell.visibility().shows_top_bar(),
+                ms = shell.draw_cost_ms_f64()
+            );
+            let focused = shell.handle_key(input::RouterKey::F3);
+            println!("shell f3 mode={mode}", mode = focused.label());
+            println!(
+                "shell passthrough={pass} focused={focused} tick={tick} meter_empty={empty} router={router}",
+                pass = shell.is_passthrough(),
+                focused = shell.is_focused(),
+                tick = shell.top_bar().tick_count_u64(),
+                empty = shell.meter().is_empty(),
+                router = shell.router().mode().label()
+            );
+            shell.top_bar_mut().pause();
+            println!(
+                "shell paused={paused}",
+                paused = shell.top_bar().is_paused()
+            );
+            shell.top_bar_mut().resume();
+            match shell.handle_long_press(input::DEV_TAG_LONG_PRESS_S_F64) {
+                Ok(mode) => println!("shell long_press mode={mode}", mode = mode.label()),
+                Err(error) => println!("shell long_press_error={error}"),
+            }
+            let tapped = shell.handle_tap(input::THREE_FINGER_TAP_COUNT_U8);
+            println!("shell tap mode={mode}", mode = tapped.label());
+            shell.set_visibility(layout::PanelVisibility::for_preset(
+                layout::DesktopPreset::Descent,
+            ));
+            println!(
+                "shell descent left={left} bottom={bottom}",
+                left = shell.visibility().shows_left_panel(),
+                bottom = shell.visibility().shows_bottom_tabs()
+            );
+            shell.set_visibility(layout::PanelVisibility::for_preset(
+                layout::DesktopPreset::TickerOnly,
+            ));
+            println!(
+                "shell route game={game} shell={shell}",
+                game = shell.route(false, false).label(),
+                shell = shell.route(true, false).label()
+            );
+            match shell.record_draw_cost(SMOKE_DRAW_MS_F64) {
+                Ok(()) => println!(
+                    "shell draw_ms={ms} avg_ms={avg}",
+                    ms = shell.draw_cost_ms_f64(),
+                    avg = shell.average_draw_ms_f64()
+                ),
+                Err(error) => println!("shell_cost_error={error}"),
+            }
+            match shell.record_draw_cost(f64::NAN) {
+                Ok(()) => println!("shell cost_nan unexpected"),
+                Err(error) => println!("shell cost_nan_error={error}"),
+            }
+            shell.request_close();
+            println!("shell closed={closed}", closed = shell.is_closed());
+            shell.reopen();
+            println!("shell reopened={closed}", closed = shell.is_closed());
+            #[cfg(feature = "dev-shell")]
+            print_dev_shell_snapshot_smoke(&mut shell);
+        }
+        Err(error) => println!("shell_error={error}"),
+    }
+}
+
+/// Observe a smoke snapshot and run one headless shell draw.
+///
+/// Available only with the non-default `dev-shell` feature.
+#[cfg(feature = "dev-shell")]
+fn print_dev_shell_snapshot_smoke(shell: &mut shell::Shell) {
+    let snapshot = dev_shell_smoke_snapshot();
+    match shell.observe_snapshot(&snapshot) {
+        Ok(()) => println!(
+            "shell snapshot tick={tick} regime={regime} mark={mark} pick_valid={pick}",
+            tick = shell.inspect().tick_count_u64(),
+            regime = shell.inspect().regime_label(),
+            mark = shell.inspect().mark_label(),
+            pick = shell.inspect().pick_valid()
+        ),
+        Err(error) => println!("shell_snapshot_error={error}"),
+    }
+    let ctx = egui::Context::default();
+    let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+        shell.draw(&ctx, ui, SMOKE_FRAME_BUDGET_MS_F64);
+    });
+    // Headless smoke has no renderer; Step 5 applies texture deltas.
+    output.textures_delta.clear();
+    println!(
+        "shell_draw=ok closed={closed} mode={mode}",
+        closed = shell.is_closed(),
+        mode = shell.mode().label()
+    );
+}
+
+/// Build a dev-shell smoke snapshot with orbit defaults.
+///
+/// Available only with the non-default `dev-shell` feature.
+#[cfg(feature = "dev-shell")]
+fn dev_shell_smoke_snapshot() -> engine::inspect::SimSnapshot {
+    engine::inspect::SimSnapshot {
+        tick_count_u64: SMOKE_TICK_COUNT_U64,
+        elapsed_s_f64: SMOKE_ELAPSED_S_F64,
+        ship_epoch_s_f64: SMOKE_ELAPSED_S_F64,
+        master_seed_u64: SMOKE_SEED_U64,
+        stream_seed_u64: SMOKE_SEED_U64,
+        snapshot_hash_u64: SMOKE_HASH_U64,
+        position_m_f64: [3_639_500.0, 0.0, 0.0],
+        velocity_mps_f64: [0.0, 3_400.0, 0.0],
+        drag_mps2_f64: [0.0, 0.0, 0.0],
+        vel_dir_f64: [0.0, 1.0, 0.0],
+        altitude_m_f64: 250_000.0,
+        speed_mps_f64: 3_400.0,
+        pressure_pa_f64: 0.0,
+        temperature_k_f64: 210.0,
+        density_kg_m3_f64: 0.0,
+        heat_flux_w_per_m2_f64: 0.0,
+        g_load_g_f64: 0.0,
+        semi_major_axis_m_f64: 3_639_500.0,
+        eccentricity_f64: 0.01,
+        inclination_rad_f64: 0.3,
+        raan_rad_f64: 0.7,
+        arg_periapsis_rad_f64: 0.5,
+        mean_anomaly_rad_f64: 1.0,
+        mu_m3_s2_f64: 4.282_837e13,
+        pick_altitude_m_f64: 249_000.0,
+        pick_range_m_f64: 1_000.0,
+        frame_body_id_u32: 1,
+        parent_body_id_u32: 0,
+        pick_body_id_u32: 1,
+        pick_cell_x_i32: 3,
+        pick_cell_y_i32: -2,
+        warp_code_u8: 0,
+        drop_reason_u8: 0,
+        warp_flags_u8: 3,
+        regime_u8: 0,
+        frame_level_u8: 5,
+        frame_depth_u8: 2,
+        elements_valid_u8: 1,
+        pick_valid_u8: 1,
+        mark_kind_u8: 6,
+        _pad_u8: [0_u8; 3],
+    }
 }
