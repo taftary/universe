@@ -550,6 +550,16 @@ impl BufferPlan {
     }
 }
 
+/// Return the `egui-wgpu` renderer type name for the shell bridge.
+///
+/// Step 3 lock proof only; the renderer is created in Step 4-5.
+/// Available only with the non-default `dev-shell` feature.
+#[cfg(feature = "dev-shell")]
+#[must_use]
+pub fn egui_wgpu_renderer_type_name() -> &'static str {
+    core::any::type_name::<egui_wgpu::Renderer>()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -660,5 +670,11 @@ mod tests {
             ShellInputMode::Focused.toggle(),
             ShellInputMode::Passthrough
         );
+    }
+
+    #[cfg(feature = "dev-shell")]
+    #[test]
+    fn renderer_type_name_mentions_renderer() {
+        assert!(super::egui_wgpu_renderer_type_name().contains("Renderer"));
     }
 }

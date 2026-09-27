@@ -91,6 +91,11 @@ fn print_theme_smoke() {
         Ok(level) => println!("budget_nan_band={band}", band = level.label()),
         Err(error) => println!("budget_nan_error={error}"),
     }
+    #[cfg(feature = "dev-shell")]
+    println!(
+        "visuals dark_mode={dark}",
+        dark = theme::dev_dark_pro_visuals().dark_mode
+    );
 }
 
 /// Print desktop presets, phone skeleton, dev tag, and shell cost.
@@ -154,5 +159,10 @@ fn print_layout_smoke() {
         recorder = buffers.input_recorder_entries_usize(),
         touch = layout::MIN_TOUCH_TARGET_PT_F32,
         height = layout::PLOT_MIN_HEIGHT_PT_F32
+    );
+    #[cfg(feature = "dev-shell")]
+    println!(
+        "egui_wgpu_renderer={name}",
+        name = layout::egui_wgpu_renderer_type_name()
     );
 }

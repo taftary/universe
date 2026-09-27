@@ -11,13 +11,15 @@ path = "src/main.rs"
 required-features = ["dev-shell"]
 
 [features]
-dev-shell = []
+dev-shell = ["dep:egui", "dep:egui-wgpu"]
 
 [lints]
 workspace = true
 
 [dependencies]
 anyhow.workspace = true
+egui = { workspace = true, optional = true }
+egui-wgpu = { workspace = true, optional = true }
 mimalloc.workspace = true
 tracing.workspace = true
 universe-engine.workspace = true

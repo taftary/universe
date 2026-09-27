@@ -374,6 +374,17 @@ impl DevDarkProTheme {
     }
 }
 
+/// Build the Step 3 stub `egui` visuals for the dev shell.
+///
+/// Step 3 wiring only; the full DevDark-Pro mapping onto `egui::Visuals`
+/// plus `egui::Style` lands in Step 4. Available only with the non-default
+/// `dev-shell` feature.
+#[cfg(feature = "dev-shell")]
+#[must_use]
+pub fn dev_dark_pro_visuals() -> egui::Visuals {
+    egui::Visuals::dark()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -453,5 +464,11 @@ mod tests {
         assert!(proposal.tabular_numerals());
         assert_eq!(DevDarkProTheme::background_rgb_u8(), BASE_BACKGROUND_RGB_U8);
         assert_eq!(DevDarkProTheme::text_rgb_u8(), BASE_TEXT_RGB_U8);
+    }
+
+    #[cfg(feature = "dev-shell")]
+    #[test]
+    fn stub_visuals_are_dark() {
+        assert!(super::dev_dark_pro_visuals().dark_mode);
     }
 }
