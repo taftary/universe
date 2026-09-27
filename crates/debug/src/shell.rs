@@ -8,21 +8,29 @@
 //! render cost; never writes sim state; removed by close flag or by building
 //! without `dev-shell`.
 
+use crate::budget::{BudgetError, BudgetStrip};
+use crate::continuity::{ContinuityError, ContinuityMonitor};
 use crate::input::{
     InputRoute, InputRouter, InputRouterError, RouterKey, TAP_PICK_TOLERANCE_PT_F32,
 };
 use crate::inspect_view::{InspectView, InspectViewError};
 use crate::layout::{DesktopPreset, PanelVisibility, ShellInputMode};
+use crate::log::{LogError, TraceLog};
 use crate::shell_cost::{ShellCostError, ShellCostMeter};
 use crate::top_bar::{TopBarError, TopBarState};
 
+#[cfg(feature = "dev-shell")]
+use crate::bottom::{BottomDraw, BottomTabs};
+#[cfg(feature = "dev-shell")]
+use crate::budget::BudgetDenominators;
 #[cfg(feature = "dev-shell")]
 use engine::inspect::SimSnapshot;
 
 /// Shell assembly failures from the owned parts.
 ///
-/// Returned for bad draw costs, bad tolerances, bad snapshot codes, and
-/// bad snapshot clocks. Never a sim write failure; the shell is read-only.
+/// Returned for bad draw costs, bad tolerances, bad snapshot codes, bad
+/// snapshot clocks, bad continuity samples, bad budget samples, and bad
+/// log pushes. Never a sim write failure; the shell is read-only.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ShellError {
     /// Top-bar clock, warp, or cost check failed.
@@ -33,6 +41,12 @@ pub enum ShellError {
     Input(InputRouterError),
     /// Inspect code map or tolerance check failed.
     Inspect(InspectViewError),
+    /// Continuity sample or window check failed.
+    Continuity(ContinuityError),
+    /// Budget sample or denominator check failed.
+    Budget(BudgetError),
+    /// Log module cap check failed.
+    Log(LogError),
 }
 
 impl core::fmt::Display for ShellError {
@@ -42,6 +56,9 @@ impl core::fmt::Display for ShellError {
             Self::ShellCost(source) => write!(formatter, "shell cost: {source}"),
             Self::Input(source) => write!(formatter, "shell input: {source}"),
             Self::Inspect(source) => write!(formatter, "shell inspect: {source}"),
+            Self::Continuity(source) => write!(formatter, "shell continuity: {source}"),
+            Self::Budget(source) => write!(formatter, "shell budget: {source}"),
+            Self::Log(source) => write!(formatter, "shell log: {source}"),
         }
     }
 }
@@ -53,6 +70,9 @@ impl std::error::Error for ShellError {
             Self::ShellCost(source) => Some(source),
             Self::Input(source) => Some(source),
             Self::Inspect(source) => Some(source),
+            Self::Continuity(source) => Some(source),
+            Self::Budget(source) => Some(source),
+            Self::Log(source) => Some(source),
         }
     }
 }
@@ -85,6 +105,27 @@ impl From<InspectViewError> for ShellError {
     }
 }
 
+impl From<ContinuityError> for ShellError {
+    /// Convert a continuity failure into a shell failure.
+    fn from(source: ContinuityError) -> Self {
+        Self::Continuity(source)
+    }
+}
+
+impl From<BudgetError> for ShellError {
+    /// Convert a budget failure into a shell failure.
+    fn from(source: BudgetError) -> Self {
+        Self::Budget(source)
+    }
+}
+
+impl From<LogError> for ShellError {
+    /// Convert a log failure into a shell failure.
+    fn from(source: LogError) -> Self {
+        Self::Log(source)
+    }
+}
+
 /// Debug shell assembly with run control, cost, input, and inspect.
 ///
 /// Plain state only; observes snapshot scalars by copy and records its
@@ -99,6 +140,15 @@ pub struct Shell {
     router: InputRouter,
     /// Read-only inspect view over snapshot scalars.
     inspect: InspectView,
+    /// Continuity monitor with handoff markers.
+    continuity: ContinuityMonitor,
+    /// Budget strip with latest samples.
+    strip: BudgetStrip,
+    /// Bounded tracing log with filters.
+    log: TraceLog,
+    /// Bottom tab assembly with selection state.
+    #[cfg(feature = "dev-shell")]
+    bottom: BottomTabs,
     /// Dock visibility for the current preset.
     visibility: PanelVisibility,
 }
@@ -118,6 +168,11 @@ impl Shell {
             meter: ShellCostMeter::new(),
             router: InputRouter::new(),
             inspect: InspectView::new(TAP_PICK_TOLERANCE_PT_F32)?,
+            continuity: ContinuityMonitor::new(),
+            strip: BudgetStrip::new(),
+            log: TraceLog::new(),
+            #[cfg(feature = "dev-shell")]
+            bottom: BottomTabs::new(),
             visibility: PanelVisibility::for_preset(DesktopPreset::TickerOnly),
         })
     }
@@ -175,6 +230,63 @@ impl Shell {
     #[must_use]
     pub const fn inspect(&self) -> &InspectView {
         &self.inspect
+    }
+
+    /// Return the continuity monitor.
+    #[must_use]
+    pub const fn continuity(&self) -> &ContinuityMonitor {
+        &self.continuity
+    }
+
+    /// Return the continuity monitor for snapshot pushes.
+    ///
+    /// Shell state only; pushes never write sim state.
+    pub const fn continuity_mut(&mut self) -> &mut ContinuityMonitor {
+        &mut self.continuity
+    }
+
+    /// Return the budget strip.
+    #[must_use]
+    pub const fn budget_strip(&self) -> &BudgetStrip {
+        &self.strip
+    }
+
+    /// Return the budget strip for sample recording.
+    ///
+    /// Shell state only; samples never write sim state.
+    pub const fn budget_strip_mut(&mut self) -> &mut BudgetStrip {
+        &mut self.strip
+    }
+
+    /// Return the tracing log.
+    #[must_use]
+    pub const fn trace_log(&self) -> &TraceLog {
+        &self.log
+    }
+
+    /// Return the tracing log for entry pushes.
+    ///
+    /// Shell state only; pushes never write sim state.
+    pub const fn trace_log_mut(&mut self) -> &mut TraceLog {
+        &mut self.log
+    }
+
+    /// Return the bottom tab assembly.
+    ///
+    /// Available only with the non-default `dev-shell` feature.
+    #[cfg(feature = "dev-shell")]
+    #[must_use]
+    pub const fn bottom_tabs(&self) -> &BottomTabs {
+        &self.bottom
+    }
+
+    /// Return the bottom tabs for tab selection.
+    ///
+    /// Shell state only; selection never writes sim state. Available only
+    /// with the non-default `dev-shell` feature.
+    #[cfg(feature = "dev-shell")]
+    pub const fn bottom_tabs_mut(&mut self) -> &mut BottomTabs {
+        &mut self.bottom
     }
 
     /// Return dock visibility for the current preset.
@@ -242,8 +354,9 @@ impl Shell {
 
     /// Observe a snapshot by copy without writing sim state.
     ///
-    /// Forwards clocks plus warp, seed, and hash to the top bar and
-    /// replaces the inspect view. Available only with `dev-shell`.
+    /// Forwards clocks plus warp, seed, and hash to the top bar, records
+    /// the readout curves in the continuity monitor, and replaces the
+    /// inspect view. Available only with `dev-shell`.
     ///
     /// # Errors
     ///
@@ -259,6 +372,7 @@ impl Shell {
             snapshot.master_seed_u64,
             snapshot.snapshot_hash_u64,
         )?;
+        self.continuity.push_snapshot(snapshot)?;
         self.inspect = view;
         Ok(())
     }
@@ -273,13 +387,21 @@ impl Shell {
         self.meter.reopen();
     }
 
-    /// Draw top bar, router, and inspector in one shell pass.
+    /// Draw top bar, router, inspector, and bottom tabs in one shell pass.
     ///
     /// Immediate-mode widgets only; creates no renderer. Step 5 owns
-    /// renderer creation. Skips everything when closed. Available only
-    /// with the non-default `dev-shell` feature.
+    /// renderer creation. Skips everything when closed; skips the bottom
+    /// tabs unless the current preset shows them. Available only with the
+    /// non-default `dev-shell` feature.
     #[cfg(feature = "dev-shell")]
-    pub fn draw(&mut self, ctx: &egui::Context, ui: &mut egui::Ui, frame_budget_ms_f64: f64) {
+    pub fn draw(
+        &mut self,
+        ctx: &egui::Context,
+        ui: &mut egui::Ui,
+        frame_budget_ms_f64: f64,
+        budgets: BudgetDenominators,
+        tracy_connected_bool: bool,
+    ) {
         if self.meter.is_closed() {
             return;
         }
@@ -287,6 +409,16 @@ impl Shell {
             .draw(ctx, ui, &mut self.meter, frame_budget_ms_f64);
         self.router.draw(ui);
         self.inspect.draw(ui);
+        if self.visibility.shows_bottom_tabs() {
+            let content = BottomDraw {
+                monitor: &self.continuity,
+                strip: &self.strip,
+                budgets,
+                log: &self.log,
+                tracy_connected_bool,
+            };
+            self.bottom.draw(ui, &content);
+        }
     }
 }
 
@@ -324,6 +456,12 @@ mod tests {
         assert!(shell.meter().is_empty());
         assert_eq!(shell.router().mode(), ShellInputMode::Passthrough);
         assert_eq!(shell.inspect().tick_count_u64(), 0);
+        assert!(shell.continuity().is_empty());
+        assert_eq!(
+            shell.budget_strip().thermal_tier(),
+            crate::budget::ThermalTier::Medium
+        );
+        assert!(shell.trace_log().is_empty());
         assert!((shell.draw_cost_ms_f64() - 0.0).abs() < FRACTION_TOL_F64);
     }
 
@@ -389,6 +527,13 @@ mod tests {
         assert!(format!("{input}").contains("input"));
         let inspect = ShellError::from(InspectViewError::Negative { value_f64: 1.0 });
         assert!(format!("{inspect}").contains("inspect"));
+        let continuity =
+            ShellError::from(crate::continuity::ContinuityError::Negative { value_f64: 1.0 });
+        assert!(format!("{continuity}").contains("continuity"));
+        let budget = ShellError::from(crate::budget::BudgetError::Negative { value_f64: 1.0 });
+        assert!(format!("{budget}").contains("budget"));
+        let log = ShellError::from(crate::log::LogError::ModuleTooLong { len_usize: 40 });
+        assert!(format!("{log}").contains("log"));
         assert!(std::error::Error::source(&top).is_some());
     }
 
@@ -448,6 +593,7 @@ mod tests {
             "smoke snapshot must observe"
         );
         assert_eq!(shell.inspect().tick_count_u64(), 7);
+        assert_eq!(shell.continuity().len_usize(), 1);
         assert_eq!(shell.top_bar().tick_count_u64(), 7);
         assert_eq!(shell.inspect().mark_label(), "ship-point");
         assert!(shell.inspect().pick_valid());
