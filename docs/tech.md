@@ -15,7 +15,7 @@ From [../README.md](../README.md) and [specs.md](specs.md#2-global-conventions) 
 
 ## Decisions
 
-Decisions D-001..D-008 were confirmed on 2026-09-26; D-012..D-014 were locked on 2026-09-26 for #20; D-015..D-016 were locked on 2026-09-26 for #22; D-017..D-018 were locked on 2026-09-26 for #23; D-019..D-021 were locked on 2026-09-26 for #26; D-022 was locked on 2026-09-27 for #32. Wording below is verbatim. Each links to its tracking issue.
+Decisions D-001..D-008 were confirmed on 2026-09-26; D-012..D-014 were locked on 2026-09-26 for #20; D-015..D-016 were locked on 2026-09-26 for #22; D-017..D-018 were locked on 2026-09-26 for #23; D-019..D-021 were locked on 2026-09-26 for #26; D-022 was locked on 2026-09-27 for #32; D-009 was locked on 2026-09-27 for #34. Wording below is verbatim. Each links to its tracking issue.
 
 | ID | Decision (verbatim) | Issue | Rationale |
 | --- | --- | --- | --- |
@@ -27,6 +27,7 @@ Decisions D-001..D-008 were confirmed on 2026-09-26; D-012..D-014 were locked on
 | D-006 | Math/precision: glam (DVec3/DQuat sim, f32 render), unit newtypes over f64, single camera-relative f64->f32 conversion point. | #1, #2 | Double-precision sim with single-precision render per [specs.md](specs.md#2-global-conventions) section 2; detail in [tech/simulation.md](tech/simulation.md). |
 | D-007 | Errors: thiserror enums per library crate, anyhow only in binaries, panics only on contract violations. | #1, #2 | Library errors are typed; application errors are ad hoc; full rule in [tech/standards.md](tech/standards.md). |
 | D-008 | Logging/profiling: tracing + Tracy (tracing-tracy) in dev, criterion benchmarks. | #1, #2 | Structured spans from day one; continuous profiling on the reference device; gates in [tech/quality.md](tech/quality.md). |
+| D-009 | Debug render bridge: egui-wgpu paired with egui 0.36.2, locked at first use in #34 Phase A. | #14, #34 | Immediate-mode shell draws on top of the game view via the D-005 stack; no draw call outside `engine::render` or `debug`. |
 | D-012 | Fixed sim step SIM_TICK_S = 0.05 s, never derived from frame time. | #20 | 20 Hz base rate balances orbital coast cost against powered-flight error on the reference phone; detail in [tech/simulation.md](tech/simulation.md). |
 | D-013 | Project PRNG xoshiro256** via rand_xoshiro with SplitMix64 domain split (gen_star/gen_body/gen_terrain). | #20 | Seeded reproducible streams per domain keep star, body, and terrain generation independent; detail in [tech/simulation.md](tech/simulation.md). |
 | D-014 | Snapshot hash xxh3-64 via xxhash-rust for golden-hash tests. | #20 | Fast non-cryptographic 64-bit hash gives cross-platform state comparison without saving procedural content; policy in [tech/quality.md](tech/quality.md). |
@@ -39,13 +40,16 @@ Decisions D-001..D-008 were confirmed on 2026-09-26; D-012..D-014 were locked on
 | D-021 | Flight regimes Orbit above 120 km / Atmosphere in (0, 120 km] / Surface at or below 0 m with classify/classify_state, adjacent-only transitions, signed distance to Rails/Surface boundaries, warp mapping orbit-cruise / atmosphere-entry auto-drop / surface-grounded, surface contact via altitude plus corotating relative speed with touchdown at 0.5 m and 5 m/s. | #26 | Regime labels gate the integrator choice and warp policy while surface geometry settles touchdown; detail in [tech/simulation.md](tech/simulation.md). |
 | D-022 | SimSnapshot 304-byte bytemuck Pod transport behind dev-shell feature, 263-byte little-endian snapshot_hash, capture_snapshot MVP derivation. | #32 | Plain-data snapshot crosses the sim to render boundary as memcopy-safe bytes with dev-only Pod derive; golden digest pins repeatability; detail in [tech/architecture.md](tech/architecture.md), [tech/simulation.md](tech/simulation.md), and [tech/debug.md](tech/debug.md). |
 
+### D-009 activation note (#34 Phase A)
+
+D-009 locks in #34 Phase A as the egui 0.36.2 plus paired egui-wgpu render bridge for the debug shell top bar, input router, inspect view, and DevDark-Pro base theme per [tech/debug.md](tech/debug.md) sections 4.1, 5, 7, 8, and 9 Phase A. Phase A reads the existing SimSnapshot (304-byte Pod, 263-byte hashed prefix from #32) and the existing warp codes (X1 through X10000), drop-reason codes (none, entry, approach, alarm), and `request_warp` / `should_auto_drop` / `apply_auto_drop` policy as-is with no engine sim change. Gaps found during Phase A become follow-up fixes, not scope expansion. `egui_plot`, `postcard`, and `egui_dock` stay deferred under D-010 and D-011. D-005 is unchanged.
+
 ### Candidate decisions for #14 (design, not locked)
 
 Proposed in [tech/debug.md](tech/debug.md) for issue #14. Each locks at first use per dependency hygiene in [tech/standards.md](tech/standards.md).
 
 | ID | Candidate decision | Issue | Rationale |
 | --- | --- | --- | --- |
-| D-009 | Debug render bridge: egui-wgpu paired with egui 0.36.2, locked at first use. | #14 | Immediate-mode shell draws on top of the game view via the D-005 stack; no draw call outside `engine::render` or `debug`. |
 | D-010 | Debug plots: egui_plot for continuity monitor curves, locked at first use; history uses pre-sized buffers only. | #14 | Readout-over-time curves with handoff markers serve the continuity check in [topics/mvp.md](../topics/mvp.md) pass/fail item 1. |
 | D-011 | Shell preset serializer: postcard is the default candidate for shell layout presets; bug-bundle exports use TOML plus CSV per debug.md section 11; egui_dock stays deferred and the section 6.1 4-dock layout is hand-placed panels until a dock crate is justified by measured layout cost. | #14 | Presets stay transient per [tech/persistence.md](tech/persistence.md); default aligns with the save-envelope candidate without locking a second serializer. |
 
