@@ -1,6 +1,6 @@
 # M1 Orbit to Surface
 
-GitHub milestone 2. Open. Delivered so far: #14, #20, #22, #23, #26, #32.
+GitHub milestone 2. Open. Delivered so far: #14, #20, #22, #23, #26, #32, #34 (upon merge).
 
 ## Goal
 
@@ -18,6 +18,7 @@ GitHub milestone 2. Open. Delivered so far: #14, #20, #22, #23, #26, #32.
 - #23 Orbits and warp (closed)
 - #26 Trajectory, surface, and handoffs (closed)
 - #32 SimSnapshot and golden test (closed)
+- #34 Shell Phase A: top bar, input router, inspect view, DevDark-Pro theme; exit per [debug.md](../tech/debug.md) section 9 Phase A (pending close on merge)
 
 ## Plan
 
@@ -28,7 +29,7 @@ Six-issue chain, one unproven system at a time:
 3. Orbits and warp (parallel with 2)
 4. Trajectory, surface, and handoffs (after 2+3)
 5. SimSnapshot and golden test (after 4)
-6. Shell Phase A (after 5)
+6. #34 Shell Phase A (after 5): top bar, input router, inspect view, DevDark-Pro theme; exit per [debug.md](../tech/debug.md) section 9 Phase A.
 
 Sequencing (moved from specs sections 3 and 8.3; design fact in `topics/scale.md` and `topics/mvp.md`): orbit coasting and warp ship first; burn execution is trajectory scope after coasting and warp.
 

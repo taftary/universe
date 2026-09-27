@@ -19,14 +19,20 @@ rust-version = "1.95"
 
 [workspace.dependencies]
 # One source for versions (`docs/tech/standards.md`); caret within the locked
-# major lines (`docs/tech/stack.md`). Render and UI crates (`wgpu`, `winit`,
-# `naga`, `egui`) join the used set when the first render code lands.
+# major lines (`docs/tech/stack.md`). `egui` plus `egui-wgpu` joined the used
+# set in #34 Phase A; `wgpu`, `winit`, `naga` join when render code lands.
 # Dev-shell `SimSnapshot` plain-data view (`bytemuck` `Pod`); D-row in Step 5.
 bytemuck = { version = "1", features = ["derive"] }
 glam = "0.33"
 # Wired when the scheduler-storage work lands (D-004); kept here so the lock
 # line stays the single source.
 hecs = "0.11"
+# D-005/D-009 (#34 Phase A): egui 0.36.2 plus paired egui-wgpu 0.36.2 for the
+# debug-shell render bridge. Pairing verified 2026-09-27 via crates.io API:
+# egui-wgpu 0.36.2 requires egui ^0.36.2 plus wgpu ^30.0; both declare
+# rust-version 1.95, matching the workspace floor (docs/tech/stack.md).
+egui = "0.36.2"
+egui-wgpu = "0.36.2"
 thiserror = "2"
 anyhow = "1"
 tracing = { version = "0.1", features = ["attributes"] }
