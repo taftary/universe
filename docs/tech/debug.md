@@ -206,6 +206,27 @@ driver, and backend and reopen D-003 per [stack.md](stack.md) if it triggers.
 Engine stays `winit`-free and `wgpu`-free; the conservative device descriptor
 plus one force-fallback retry from Step 8b is unchanged.
 
+Step 8e live software-fallback validation (issue #44): `--run-window`
+with the software CPU fallback is PROVEN live on branch
+`task/44-winit-window` at `5fff303`: window opened YES at 1280x800 titled
+`universe-debug`, clickable YES with pause, resume, and step visible.
+Screenshot readouts at capture: `tick=1178`, `elapsed_s=58.90`, `warp=1x`
+with `drop=manual`, `step_s=0.05`, frame `0.00 ms` and `0 fps`,
+`health=nominal`, `seed=08d3`, `hash=739c`, clean shell cost `1.582 ms`
+(`4.7%` of `FRAME_BUDGET_MS`) nominal with close-shell affordance;
+inspect `tick 1178`, `elapsed 58.90`, `seed 08d3`, `hash 739c`; warp 1x
+manual, `regime=orbit`, `frame=Lv5 orbital`, `body=1`, `parent=0`,
+`depth=2`; `altitude 250000.0 m`, `speed 3172.5 m/s`, `pressure 0 Pa`,
+`temp 150.00 K`, `density 0 kg/m3`, `heat 0`, `g 0`; elements valid with
+`axis 3639500 m` and `ecc 0.0000`; pick invalid. Software path used the
+Microsoft Basic Render Driver CPU adapter from the prior run. Hardware
+path on Intel UHD 620 stays an upstream driver fault
+(`STATUS_ACCESS_VIOLATION` inside `Adapter::request_device`) as recorded
+in Step 8c. Frame `0.00 ms` and `0 fps` is flagged as
+first-frame and unfocused-window suspect; the `1.582 ms` shell cost is
+the observed cost evidence. Sustained frame cost stays to be measured on
+a GPU host.
+
 ### 6.2 Phone portrait
 
 Phone uses the same panels with a different arrangement:
