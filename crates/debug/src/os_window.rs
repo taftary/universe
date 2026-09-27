@@ -127,6 +127,12 @@ pub const WAYLAND_DISPLAY_ENV_NAME: &str = "WAYLAND_DISPLAY";
 /// a DX12-only attempt.
 pub const ADAPTER_BACKENDS_LABEL: &str = "dx12+vulkan+metal+gl(ANGLE)";
 
+/// Device debug label, dimensionless.
+///
+/// Source: this module only; tags the conservative device request so
+/// driver logs point at the OS window path.
+const DEVICE_LABEL: &str = "universe-os-window";
+
 /// Reason for staying headless without opening a window.
 ///
 /// Returned by [`decide_launch`] so CI logs stay explicit.
@@ -371,6 +377,67 @@ fn request_adapter_with_fallbacks(
     Err(OsWindowError::NoAdapter(no_adapter_detail(
         &reports.join("; "),
     )))
+}
+
+/// Build the conservative device descriptor for the OS window.
+///
+/// Requests no extra features, [`wgpu::Limits::downlevel_defaults`], the
+/// [`DEVICE_LABEL`] tag, and performance memory hints, so Intel-class
+/// integrated GPUs stay within their supported set. Init-time only; the
+/// frame loop never builds a descriptor.
+fn conservative_device_descriptor() -> wgpu::DeviceDescriptor<'static> {
+    wgpu::DeviceDescriptor {
+        label: Some(DEVICE_LABEL),
+        required_features: wgpu::Features::empty(),
+        required_limits: wgpu::Limits::downlevel_defaults(),
+        memory_hints: wgpu::MemoryHints::Performance,
+        ..Default::default()
+    }
+}
+
+/// Request the logical device with one force-fallback retry.
+///
+/// Tries `adapter` first with [`conservative_device_descriptor`]; on `Err`
+/// requests a force-fallback adapter once and retries the same descriptor.
+/// Maps every reported failure to [`OsWindowError::Device`]; a fault inside
+/// the driver call itself (issue #44 Step 8) still aborts before any `Err`
+/// can be mapped. Init-time only; the frame loop never calls this.
+///
+/// # Errors
+///
+/// Returns [`OsWindowError::Device`] when the first request plus the
+/// fallback retry both report failures, or when the fallback adapter itself
+/// is unavailable.
+fn request_device_with_fallback(
+    instance: &wgpu::Instance,
+    surface: &wgpu::Surface<'_>,
+    adapter: &wgpu::Adapter,
+) -> Result<(wgpu::Device, wgpu::Queue), OsWindowError> {
+    let descriptor = conservative_device_descriptor();
+    match block_on_init(adapter.request_device(&descriptor)) {
+        Ok(pair) => Ok(pair),
+        Err(first_error) => {
+            let fallback_options = wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::HighPerformance,
+                force_fallback_adapter: true,
+                compatible_surface: Some(surface),
+                apply_limit_buckets: false,
+            };
+            match block_on_init(instance.request_adapter(&fallback_options)) {
+                Ok(fallback_adapter) => {
+                    match block_on_init(fallback_adapter.request_device(&descriptor)) {
+                        Ok(pair) => Ok(pair),
+                        Err(retry_error) => Err(OsWindowError::Device(format!(
+                            "conservative request failed ({first_error}); fallback retry failed ({retry_error}); backends={ADAPTER_BACKENDS_LABEL}; device={DEVICE_LABEL}"
+                        ))),
+                    }
+                }
+                Err(adapter_error) => Err(OsWindowError::Device(format!(
+                    "conservative request failed ({first_error}); fallback adapter unavailable ({adapter_error}); backends={ADAPTER_BACKENDS_LABEL}; device={DEVICE_LABEL}"
+                ))),
+            }
+        }
+    }
 }
 
 /// Probe for any usable wgpu adapter before touching winit or a surface.
@@ -641,7 +708,9 @@ impl ActiveWindow {
     /// Runs on the main thread inside resume; blocks only here while the
     /// adapter plus device resolve. The frame loop never blocks. Adapter
     /// resolution runs the hardware-then-fallback chain in
-    /// [`request_adapter_with_fallbacks`]; the upstream-access-violation
+    /// [`request_adapter_with_fallbacks`]; device resolution uses the
+    /// conservative descriptor plus one force-fallback retry in
+    /// [`request_device_with_fallback`]. The upstream-access-violation
     /// caveat on GPU-less Windows hosts is documented on
     /// [`preflight_adapter_probe`].
     ///
@@ -678,9 +747,7 @@ impl ActiveWindow {
         else {
             return Err(OsWindowError::NoSurfaceFormat);
         };
-        let (device, queue) =
-            block_on_init(adapter.request_device(&wgpu::DeviceDescriptor::default()))
-                .map_err(|error| OsWindowError::Device(error.to_string()))?;
+        let (device, queue) = request_device_with_fallback(&instance, &surface, &adapter)?;
         let size = window.inner_size();
         let mut surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -1320,5 +1387,28 @@ mod tests {
         let rendered = error.to_string();
         assert!(rendered.contains("no compatible wgpu adapter"));
         assert!(rendered.contains("probe-detail"));
+    }
+
+    #[test]
+    fn conservative_descriptor_stays_within_downlevel_limits() {
+        let descriptor = conservative_device_descriptor();
+        assert_eq!(descriptor.label, Some(DEVICE_LABEL));
+        assert!(descriptor.required_features.is_empty());
+        assert_eq!(
+            descriptor.required_limits,
+            wgpu::Limits::downlevel_defaults()
+        );
+        assert!(matches!(
+            descriptor.memory_hints,
+            wgpu::MemoryHints::Performance
+        ));
+    }
+
+    #[test]
+    fn device_error_renders_detail() {
+        let error = OsWindowError::Device(String::from("device-detail"));
+        let rendered = error.to_string();
+        assert!(rendered.contains("os window device"));
+        assert!(rendered.contains("device-detail"));
     }
 }
