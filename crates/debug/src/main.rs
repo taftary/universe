@@ -118,6 +118,8 @@ fn main() -> anyhow::Result<()> {
 ///
 /// Returns true when the window ran; false keeps the headless demo.
 /// `--software` forces the fallback adapter with `--run-window`, else headless.
+/// `--backend auto|vulkan|dx12|gl` restricts the wgpu backend with
+/// `--run-window`, else headless; unknown values are typed errors.
 /// Available only with the non-default `dev-shell` feature.
 ///
 /// # Errors
@@ -127,9 +129,10 @@ fn main() -> anyhow::Result<()> {
 fn run_dev_shell_window() -> anyhow::Result<bool> {
     let args: Vec<String> = std::env::args().collect();
     let software_mode_bool = os_window::software_requested(&args);
+    let backend_selection = os_window::parse_backend_selection(&args)?;
     match os_window::decide_launch(&args) {
         os_window::LaunchDecision::OpenWindow => {
-            os_window::run_window(software_mode_bool)?;
+            os_window::run_window(software_mode_bool, backend_selection)?;
             Ok(true)
         }
         os_window::LaunchDecision::StayHeadless(reason) => {

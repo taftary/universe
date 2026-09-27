@@ -70,4 +70,6 @@ M2 follow-up (draft): blind legibility run per protocol appendix (AC4), on-devic
 
 Partial close: AC1/AC2/AC6 pass. M2 carries AC4 blind run per protocol appendix, AC3 on-device run, and tag (AC7). No release claimed, no tag cut.
 
+#50 debug OS window auto->dx12 quarantine on Intel UHD 620 driver 31.0.101.2130 plus --backend diagnostics flag (Step 5c PASS): auto 2/2 alive, dx12 3/3 alive, zero attributed faults; independent of #48 phone/human/tag tail.
+
 Related: [../../README.md](../../README.md), [../tech.md](../tech.md), [../agents/gh-orchestrator.md](../agents/gh-orchestrator.md).
