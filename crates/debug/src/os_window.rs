@@ -1,0 +1,1201 @@
+//! OS window: winit event loop plus wgpu surface plus egui-wgpu renderer.
+//!
+//! Drives [`DesktopWindow`](crate::shell::DesktopWindow) ticker-only on the main
+//! thread under D-003. The main thread owns winit plus the wgpu surface per
+//! `docs/tech/architecture.md`; the sim plus render thread split lands later,
+//! so one loop advances a fixed-step demo orbit and renders the shell here.
+//! Headless CI never opens a window: [`decide_launch`] requires the explicit
+//! [`RUN_WINDOW_FLAG`] plus a display. Keyboard widget input beyond `F3` and
+//! `Escape` stays deferred; pointer input plus those two router keys drive the
+//! ticker-only top bar meanwhile.
+
+use std::future::Future;
+use std::pin::pin;
+use std::sync::Arc;
+use std::task::{Context as TaskContext, Poll, Wake, Waker};
+use std::thread;
+use std::time::Instant;
+
+use crate::budget::BudgetDenominators;
+use crate::input::RouterKey;
+use crate::layout::DESKTOP_WINDOW_TITLE;
+use crate::shell::{DesktopWindow, ShellError};
+use crate::theme::BASE_BACKGROUND_RGB_U8;
+use crate::top_bar::MILLIS_PER_SECOND_F64;
+use engine::inspect::InspectError;
+use engine::sim::{SIM_TICK_S, Scheduler};
+use winit::application::ApplicationHandler;
+use winit::dpi::{LogicalSize, PhysicalPosition, PhysicalSize};
+use winit::event::{
+    ElementState, MouseButton, MouseScrollDelta, TouchPhase as WinitTouchPhase, WindowEvent,
+};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::window::{Window, WindowId};
+
+/// Command-line flag requesting the OS window.
+///
+/// The window opens only with this flag plus a display; see [`decide_launch`].
+pub const RUN_WINDOW_FLAG: &str = "--run-window";
+
+/// Frame budget in milliseconds (`FRAME_BUDGET_MS`).
+///
+/// Source: `docs/tech/debug.md` section 2; gates live in `docs/tech/quality.md`.
+pub const FRAME_BUDGET_MS_F64: f64 = 33.33;
+
+/// Sim-tick average budget in milliseconds (`SIM_TICK_AVG_MS`).
+///
+/// Source: `docs/tech/debug.md` section 2; gates live in `docs/tech/quality.md`.
+pub const SIM_TICK_AVG_BUDGET_MS_F64: f64 = 8.0;
+
+/// Sim-tick p99 budget in milliseconds (`SIM_TICK_P99_MS`).
+///
+/// Source: `docs/tech/debug.md` section 2; gates live in `docs/tech/quality.md`.
+pub const SIM_TICK_P99_BUDGET_MS_F64: f64 = 16.0;
+
+/// Surface-hitch p95 budget in milliseconds (`SURFACE_HITCH_P95_MS`).
+///
+/// Source: `docs/tech/debug.md` section 2; gates live in `docs/tech/quality.md`.
+pub const SURFACE_HITCH_P95_BUDGET_MS_F64: f64 = 100.0;
+
+/// Memory ceiling in megabytes (`MEMORY_CEILING_MB`).
+///
+/// Source: `docs/tech/debug.md` section 2; gates live in `docs/tech/quality.md`.
+pub const MEMORY_CEILING_MB_F64: f64 = 1024.0;
+
+/// Cold-start budget in seconds (`COLD_START_S`).
+///
+/// Source: `docs/tech/debug.md` section 2; gates live in `docs/tech/quality.md`.
+pub const COLD_START_BUDGET_S_F64: f64 = 5.0;
+
+/// Demo master seed, dimensionless.
+///
+/// Source: `tests/shell_phase_a.rs` golden seed (fractional hex digits of pi).
+pub const DEMO_MASTER_SEED_U64: u64 = 0x243F_6A88_85A3_08D3;
+
+/// Demo circular-orbit altitude in meters.
+///
+/// Source: `tests/shell_phase_a.rs` golden cruise profile at 250 km.
+pub const DEMO_CRUISE_ALTITUDE_M_F64: f64 = 250_000.0;
+
+/// Maximum catch-up sim steps per frame, dimensionless.
+///
+/// Bounds one redraw under warp; excess wall time is dropped, never spiraled,
+/// per the frame-pacer rule in `docs/tech/mobile.md`. Demo bound only.
+pub const MAX_CATCH_UP_STEPS_PER_FRAME_U64: u64 = 600;
+
+/// Minimum surface extent in pixels.
+///
+/// Guards resize-to-zero (minimized window) before surface reconfiguration.
+pub const MIN_SURFACE_EXTENT_PX_U32: u32 = 1;
+
+/// Desired surface frame latency in frames.
+///
+/// Init-time wgpu default; the frame loop never reconfigures for latency.
+pub const SURFACE_MAX_LATENCY_U32: u32 = 2;
+
+/// Clear alpha in the opaque range.
+///
+/// Source: wgpu opaque clear (alpha 1.0).
+pub const CLEAR_ALPHA_F64: f64 = 1.0;
+
+/// Eight-bit channel maximum for clear-color conversion.
+///
+/// Source: 8-bit display channels in `crate::theme`.
+pub const RGB_CHANNEL_MAX_F64: f64 = 255.0;
+
+/// Fallback pixels-per-point when the OS scale is unusable.
+///
+/// Source: winit default scale factor of 1.0.
+pub const FALLBACK_PIXELS_PER_POINT_F64: f64 = 1.0;
+
+/// X11 display environment variable name.
+///
+/// Source: X11 convention; probed on every host in [`display_available`].
+pub const DISPLAY_ENV_NAME: &str = "DISPLAY";
+
+/// Wayland display environment variable name.
+///
+/// Source: Wayland convention; probed on every host in [`display_available`].
+pub const WAYLAND_DISPLAY_ENV_NAME: &str = "WAYLAND_DISPLAY";
+
+/// Reason for staying headless without opening a window.
+///
+/// Returned by [`decide_launch`] so CI logs stay explicit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HeadlessReason {
+    /// The explicit [`RUN_WINDOW_FLAG`] was absent.
+    FlagMissing,
+    /// The flag was present but no display was detected.
+    DisplayMissing,
+}
+
+impl HeadlessReason {
+    /// Return the short headless reason label.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Headless gate seam; unit tests cover the decision meanwhile."
+        )
+    )]
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::FlagMissing => "flag-missing",
+            Self::DisplayMissing => "display-missing",
+        }
+    }
+}
+
+impl core::fmt::Display for HeadlessReason {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::FlagMissing => {
+                write!(formatter, "missing {RUN_WINDOW_FLAG}; headless demo only")
+            }
+            Self::DisplayMissing => {
+                write!(formatter, "no display detected; headless demo only")
+            }
+        }
+    }
+}
+
+/// Launch decision for the debug binary entry point.
+///
+/// Computed by [`decide_launch`] before any window or GPU work.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LaunchDecision {
+    /// Open the OS window with the ticker-only shell.
+    OpenWindow,
+    /// Stay headless and run the tick demo instead.
+    StayHeadless(HeadlessReason),
+}
+
+/// OS window failures with typed variants.
+///
+/// External winit plus wgpu errors keep their rendered detail as strings;
+/// shell plus sim plus snapshot failures keep their typed sources.
+#[derive(Debug)]
+pub enum OsWindowError {
+    /// Event-loop creation or run failed with rendered detail.
+    EventLoop(String),
+    /// OS window creation failed with rendered detail.
+    Window(String),
+    /// Wgpu surface creation failed with rendered detail.
+    Surface(String),
+    /// No compatible wgpu adapter was found.
+    NoAdapter,
+    /// The adapter offered no surface format.
+    NoSurfaceFormat,
+    /// Wgpu device request failed with rendered detail.
+    Device(String),
+    /// Demo sim construction failed with rendered detail.
+    SimInit(String),
+    /// Demo sim step failed with rendered detail.
+    SimStep(String),
+    /// Snapshot capture failed.
+    Snapshot(InspectError),
+    /// Shell assembly, observation, or draw failed.
+    Shell(ShellError),
+    /// Budget denominators were rejected with rendered detail.
+    Budgets(String),
+}
+
+impl core::fmt::Display for OsWindowError {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::EventLoop(detail) => write!(formatter, "os window event loop: {detail}"),
+            Self::Window(detail) => write!(formatter, "os window creation: {detail}"),
+            Self::Surface(detail) => write!(formatter, "os window surface: {detail}"),
+            Self::NoAdapter => write!(formatter, "os window: no compatible wgpu adapter"),
+            Self::NoSurfaceFormat => {
+                write!(formatter, "os window: adapter offered no surface format")
+            }
+            Self::Device(detail) => write!(formatter, "os window device: {detail}"),
+            Self::SimInit(detail) => write!(formatter, "os window sim init: {detail}"),
+            Self::SimStep(detail) => write!(formatter, "os window sim step: {detail}"),
+            Self::Snapshot(source) => write!(formatter, "os window snapshot: {source}"),
+            Self::Shell(source) => write!(formatter, "os window shell: {source}"),
+            Self::Budgets(detail) => write!(formatter, "os window budgets: {detail}"),
+        }
+    }
+}
+
+impl std::error::Error for OsWindowError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Snapshot(source) => Some(source),
+            Self::Shell(source) => Some(source),
+            Self::EventLoop(_)
+            | Self::Window(_)
+            | Self::Surface(_)
+            | Self::NoAdapter
+            | Self::NoSurfaceFormat
+            | Self::Device(_)
+            | Self::SimInit(_)
+            | Self::SimStep(_)
+            | Self::Budgets(_) => None,
+        }
+    }
+}
+
+impl From<ShellError> for OsWindowError {
+    /// Convert a shell failure into an OS window failure.
+    fn from(source: ShellError) -> Self {
+        Self::Shell(source)
+    }
+}
+
+impl From<InspectError> for OsWindowError {
+    /// Convert a snapshot failure into an OS window failure.
+    fn from(source: InspectError) -> Self {
+        Self::Snapshot(source)
+    }
+}
+
+/// Decide whether the process opens the OS window.
+///
+/// Opens only with [`RUN_WINDOW_FLAG`] in `args` plus a display from
+/// [`display_available`]; otherwise returns the headless reason. Reads no
+/// window or GPU state, so headless tests call this freely.
+#[must_use]
+pub fn decide_launch(args: &[String]) -> LaunchDecision {
+    decide_launch_with(args, display_available())
+}
+
+/// Decide launch with an injected display flag.
+///
+/// Test seam for [`decide_launch`]: `display_present_bool` replaces the OS
+/// display probe so unit tests stay deterministic on every host.
+#[must_use]
+pub fn decide_launch_with(args: &[String], display_present_bool: bool) -> LaunchDecision {
+    let requested_bool = args.iter().any(|arg| arg == RUN_WINDOW_FLAG);
+    if !requested_bool {
+        return LaunchDecision::StayHeadless(HeadlessReason::FlagMissing);
+    }
+    if !display_present_bool {
+        return LaunchDecision::StayHeadless(HeadlessReason::DisplayMissing);
+    }
+    LaunchDecision::OpenWindow
+}
+
+/// Report whether the host offers a display.
+///
+/// Windows plus macOS always return true; other targets require a non-empty
+/// `DISPLAY` or `WAYLAND_DISPLAY` so headless CI stays window-free. The probe
+/// runs on every host so the gate stays testable anywhere.
+#[must_use]
+pub fn display_available() -> bool {
+    let env_bool = display_available_with(
+        std::env::var(DISPLAY_ENV_NAME).ok().as_deref(),
+        std::env::var(WAYLAND_DISPLAY_ENV_NAME).ok().as_deref(),
+    );
+    cfg!(any(target_os = "windows", target_os = "macos")) || env_bool
+}
+
+/// Check display variables without touching the process environment.
+///
+/// Shared probe for [`display_available`] plus its tests: true with either
+/// non-empty value.
+#[must_use]
+pub fn display_available_with(display_value: Option<&str>, wayland_value: Option<&str>) -> bool {
+    display_value.is_some_and(|value| !value.is_empty())
+        || wayland_value.is_some_and(|value| !value.is_empty())
+}
+
+/// Run the ticker-only OS window until close.
+///
+/// Creates the winit event loop, wgpu surface, and egui-wgpu renderer on the
+/// main thread, drives one [`DesktopWindow`](crate::shell::DesktopWindow) with
+/// a fixed-step demo orbit, and returns after close or a fatal error.
+///
+/// # Errors
+///
+/// Returns [`OsWindowError`] for event-loop, window, surface, adapter,
+/// device, sim, snapshot, shell, or budget failures.
+pub fn run_window() -> Result<(), OsWindowError> {
+    let event_loop =
+        EventLoop::new().map_err(|error| OsWindowError::EventLoop(error.to_string()))?;
+    let mut app = WindowApp::default();
+    event_loop
+        .run_app(&mut app)
+        .map_err(|error| OsWindowError::EventLoop(error.to_string()))?;
+    match app.fatal {
+        Some(error) => Err(error),
+        None => Ok(()),
+    }
+}
+
+/// Winit application owning the optional GPU-bound window state.
+///
+/// Stays empty until the first resume; fatal callback errors park in
+/// `fatal` because winit callbacks return no `Result`.
+#[derive(Default)]
+struct WindowApp {
+    /// GPU-bound window state after resume, if creation succeeded.
+    active: Option<ActiveWindow>,
+    /// Fatal error captured inside event callbacks, if any.
+    fatal: Option<OsWindowError>,
+}
+
+impl ApplicationHandler for WindowApp {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        if self.active.is_some() {
+            return;
+        }
+        match ActiveWindow::create(event_loop) {
+            Ok(active) => {
+                event_loop.set_control_flow(ControlFlow::Poll);
+                self.active = Some(active);
+            }
+            Err(error) => {
+                self.fatal = Some(error);
+                event_loop.exit();
+            }
+        }
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        _window_id: WindowId,
+        event: WindowEvent,
+    ) {
+        if self.fatal.is_some() {
+            event_loop.exit();
+            return;
+        }
+        let Some(active) = self.active.as_mut() else {
+            return;
+        };
+        match event {
+            WindowEvent::CloseRequested | WindowEvent::Destroyed => event_loop.exit(),
+            WindowEvent::Resized(size) => active.on_resized(size.width, size.height),
+            WindowEvent::RedrawRequested => {
+                if let Err(error) = active.redraw() {
+                    self.fatal = Some(error);
+                    event_loop.exit();
+                }
+            }
+            WindowEvent::KeyboardInput { event, .. } => active.on_key(&event),
+            WindowEvent::ModifiersChanged(modifiers) => active.on_modifiers(modifiers),
+            WindowEvent::CursorMoved { position, .. } => active.on_cursor_moved(position),
+            WindowEvent::CursorLeft { .. } => active.on_cursor_left(),
+            WindowEvent::MouseInput { state, button, .. } => {
+                active.on_mouse_button(state, button);
+            }
+            WindowEvent::MouseWheel { delta, phase, .. } => active.on_wheel(delta, phase),
+            _ => {}
+        }
+    }
+
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        if self.fatal.is_some() {
+            event_loop.exit();
+            return;
+        }
+        if let Some(active) = self.active.as_ref() {
+            active.window.request_redraw();
+        }
+    }
+}
+
+/// Demo sim orbit behind the ticker-only shell.
+///
+/// Fixed-step scheduler plus a circular Mars-like orbit matching the
+/// `tests/shell_phase_a.rs` golden profile; seeds advance per tick.
+#[derive(Debug)]
+struct SimDriver {
+    /// Fixed-step scheduler owning tick count plus elapsed time.
+    scheduler: Scheduler,
+    /// Current point-ship state vector.
+    state: engine::trajectory::StateVector,
+    /// Mars-like reference body parameters.
+    body: engine::body::BodyParams,
+    /// Mars-like atmosphere parameters.
+    atmosphere: engine::atmosphere::AtmosphereParams,
+    /// Point-ship vehicle parameters.
+    vehicle: engine::trajectory::VehicleParams,
+    /// Gravity parameter for the coast model.
+    mu: engine::orbit::Mu,
+    /// Run master seed, dimensionless.
+    master_seed_u64: u64,
+    /// Per-tick stream seed, dimensionless.
+    stream_seed_u64: u64,
+}
+
+impl SimDriver {
+    /// Build the circular demo orbit at the cruise altitude.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OsWindowError`] for rejected atmosphere, gravity, or state.
+    fn cruise() -> Result<Self, OsWindowError> {
+        let body = engine::body::BodyParams::mars_like();
+        let atmosphere = engine::atmosphere::AtmosphereParams::mars_like()
+            .map_err(|error| OsWindowError::SimInit(error.to_string()))?;
+        let vehicle = engine::trajectory::VehicleParams::preset();
+        let mu = engine::orbit::Mu::new(body.gravitational_parameter_m3_s2())
+            .map_err(|error| OsWindowError::SimInit(error.to_string()))?;
+        let radius_m_f64 = body.radius_m().value() + DEMO_CRUISE_ALTITUDE_M_F64;
+        let speed_mps_f64 = libm::sqrt(mu.value() / radius_m_f64);
+        let state = engine::trajectory::StateVector::new(
+            glam::DVec3::new(radius_m_f64, 0.0, 0.0),
+            glam::DVec3::new(0.0, speed_mps_f64, 0.0),
+            engine::units::Seconds::new(0.0),
+        )
+        .map_err(|error| OsWindowError::SimInit(error.to_string()))?;
+        Ok(Self {
+            scheduler: Scheduler::default(),
+            state,
+            body,
+            atmosphere,
+            vehicle,
+            mu,
+            master_seed_u64: DEMO_MASTER_SEED_U64,
+            stream_seed_u64: DEMO_MASTER_SEED_U64,
+        })
+    }
+}
+
+/// Accumulated egui input between redraws.
+///
+/// Pointer position stays `None` until the first cursor move; buttons without
+/// a known position are dropped rather than guessed.
+#[derive(Debug, Default)]
+struct InputAccum {
+    /// Pending egui events drained on every redraw.
+    events: Vec<egui::Event>,
+    /// Current modifier state from the OS.
+    modifiers: egui::Modifiers,
+    /// Last cursor position in points, if seen.
+    pointer_pos_points: Option<egui::Pos2>,
+}
+
+/// Frame clocks plus the fixed-step accumulator.
+///
+/// Wall-clock only; sim time advances through the scheduler, never from these.
+#[derive(Debug)]
+struct FrameClocks {
+    /// Process instant at window creation.
+    start: Instant,
+    /// Instant of the previous redraw.
+    last: Instant,
+    /// Elapsed wall time in seconds for egui animation time.
+    elapsed_s_f64: f64,
+    /// Last frame delta in seconds for the sim accumulator.
+    frame_dt_s_f64: f64,
+    /// Unconsumed sim time in seconds.
+    accumulator_s_f64: f64,
+}
+
+impl FrameClocks {
+    /// Start all clocks at window creation.
+    fn start_now() -> Self {
+        let now = Instant::now();
+        Self {
+            start: now,
+            last: now,
+            elapsed_s_f64: 0.0,
+            frame_dt_s_f64: 0.0,
+            accumulator_s_f64: 0.0,
+        }
+    }
+}
+
+/// GPU-bound window state created on first resume.
+///
+/// Owns the winit window, wgpu surface plus device, egui-wgpu renderer, egui
+/// context, ticker-only shell, and demo sim on the main thread.
+struct ActiveWindow {
+    /// OS window handle shared with the wgpu surface.
+    window: Arc<Window>,
+    /// Wgpu presentation surface bound to the window.
+    surface: wgpu::Surface<'static>,
+    /// Wgpu logical device for shell rendering.
+    device: wgpu::Device,
+    /// Wgpu queue for shell uploads plus submits.
+    queue: wgpu::Queue,
+    /// Current surface configuration for reconfigure on resize.
+    surface_config: wgpu::SurfaceConfiguration,
+    /// Immediate-mode shell renderer over the surface format.
+    renderer: egui_wgpu::Renderer,
+    /// Immediate-mode context feeding the shell draw.
+    egui: egui::Context,
+    /// Ticker-only shell assembly with run control plus inspect.
+    shell: DesktopWindow,
+    /// Budget denominators passed at draw time, never stored elsewhere.
+    budgets: BudgetDenominators,
+    /// Demo orbit behind the shell snapshots.
+    sim: SimDriver,
+    /// Accumulated input drained per redraw.
+    input: InputAccum,
+    /// Frame clocks plus sim accumulator.
+    clocks: FrameClocks,
+}
+
+impl ActiveWindow {
+    /// Create the window, surface, device, renderer, shell, and sim.
+    ///
+    /// Runs on the main thread inside resume; blocks only here while the
+    /// adapter plus device resolve. The frame loop never blocks.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OsWindowError`] for window, surface, adapter, device,
+    /// shell, sim, or budget failures.
+    fn create(event_loop: &ActiveEventLoop) -> Result<Self, OsWindowError> {
+        let shell = DesktopWindow::open()?;
+        let size_config = shell.config();
+        let attrs = Window::default_attributes()
+            .with_title(DESKTOP_WINDOW_TITLE)
+            .with_inner_size(LogicalSize::new(
+                size_config.width_pt_f32(),
+                size_config.height_pt_f32(),
+            ));
+        let window = Arc::new(
+            event_loop
+                .create_window(attrs)
+                .map_err(|error| OsWindowError::Window(error.to_string()))?,
+        );
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let surface = instance
+            .create_surface(Arc::clone(&window))
+            .map_err(|error| OsWindowError::Surface(error.to_string()))?;
+        let adapter = block_on_init(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::HighPerformance,
+            force_fallback_adapter: false,
+            compatible_surface: Some(&surface),
+            apply_limit_buckets: false,
+        }))
+        .map_err(|_error| OsWindowError::NoAdapter)?;
+        let capabilities = surface.get_capabilities(&adapter);
+        let Some(format) = capabilities
+            .formats
+            .iter()
+            .copied()
+            .find(wgpu::TextureFormat::is_srgb)
+            .or_else(|| capabilities.formats.first().copied())
+        else {
+            return Err(OsWindowError::NoSurfaceFormat);
+        };
+        let (device, queue) =
+            block_on_init(adapter.request_device(&wgpu::DeviceDescriptor::default()))
+                .map_err(|error| OsWindowError::Device(error.to_string()))?;
+        let size = window.inner_size();
+        let mut surface_config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format,
+            color_space: wgpu::SurfaceColorSpace::Auto,
+            width: size.width.max(MIN_SURFACE_EXTENT_PX_U32),
+            height: size.height.max(MIN_SURFACE_EXTENT_PX_U32),
+            present_mode: wgpu::PresentMode::Fifo,
+            desired_maximum_frame_latency: SURFACE_MAX_LATENCY_U32,
+            alpha_mode: wgpu::CompositeAlphaMode::Auto,
+            view_formats: Vec::new(),
+        };
+        surface.configure(&device, &surface_config);
+        surface_config.width = size.width.max(MIN_SURFACE_EXTENT_PX_U32);
+        surface_config.height = size.height.max(MIN_SURFACE_EXTENT_PX_U32);
+        let renderer =
+            egui_wgpu::Renderer::new(&device, format, egui_wgpu::RendererOptions::default());
+        let egui = egui::Context::default();
+        egui.set_visuals(crate::theme::dev_dark_pro_visuals());
+        let budgets = BudgetDenominators::new(
+            FRAME_BUDGET_MS_F64,
+            SIM_TICK_AVG_BUDGET_MS_F64,
+            SIM_TICK_P99_BUDGET_MS_F64,
+            SURFACE_HITCH_P95_BUDGET_MS_F64,
+            MEMORY_CEILING_MB_F64,
+            COLD_START_BUDGET_S_F64,
+        )
+        .map_err(|error| OsWindowError::Budgets(error.to_string()))?;
+        let sim = SimDriver::cruise()?;
+        Ok(Self {
+            window,
+            surface,
+            device,
+            queue,
+            surface_config,
+            renderer,
+            egui,
+            shell,
+            budgets,
+            sim,
+            input: InputAccum::default(),
+            clocks: FrameClocks::start_now(),
+        })
+    }
+
+    /// Reconfigure the surface after a non-zero resize.
+    ///
+    /// Zero extents (minimized window) are skipped; the next non-zero resize
+    /// or frame reconfigures.
+    fn on_resized(&mut self, width_px_u32: u32, height_px_u32: u32) {
+        if width_px_u32 < MIN_SURFACE_EXTENT_PX_U32 || height_px_u32 < MIN_SURFACE_EXTENT_PX_U32 {
+            return;
+        }
+        self.surface_config.width = width_px_u32;
+        self.surface_config.height = height_px_u32;
+        self.surface.configure(&self.device, &self.surface_config);
+    }
+
+    /// Handle one keyboard event for the shell router only.
+    ///
+    /// `F3` toggles focus and `Escape` returns to passthrough per
+    /// `docs/tech/debug.md` section 5; remaining keys stay deferred until
+    /// widget text input lands.
+    fn on_key(&mut self, event: &winit::event::KeyEvent) {
+        if event.state != ElementState::Pressed || event.repeat {
+            return;
+        }
+        match event.physical_key {
+            PhysicalKey::Code(KeyCode::F3) => {
+                self.shell.handle_key(RouterKey::F3);
+            }
+            PhysicalKey::Code(KeyCode::Escape) => {
+                self.shell.handle_key(RouterKey::Escape);
+            }
+            _ => {}
+        }
+    }
+
+    /// Store the OS modifier state for the next redraw.
+    ///
+    /// Queues a modifier-changed event alongside the stored state because
+    /// egui 0.36 carries modifiers per event, not per frame.
+    fn on_modifiers(&mut self, modifiers: winit::event::Modifiers) {
+        let state = modifiers.state();
+        let ctrl_bool = state.control_key();
+        let super_bool = state.super_key();
+        let mac_bool = cfg!(target_os = "macos");
+        self.input.modifiers = egui::Modifiers {
+            alt: state.alt_key(),
+            ctrl: ctrl_bool,
+            shift: state.shift_key(),
+            mac_cmd: mac_bool && super_bool,
+            command: if mac_bool { super_bool } else { ctrl_bool },
+        };
+        self.input
+            .events
+            .push(egui::Event::ModifiersChanged(self.input.modifiers));
+    }
+
+    /// Store the cursor position and queue a pointer move.
+    fn on_cursor_moved(&mut self, position: PhysicalPosition<f64>) {
+        let scale_f64 = self.window.scale_factor();
+        let pos = egui::pos2(
+            physical_px_to_points_f32(position.x, scale_f64),
+            physical_px_to_points_f32(position.y, scale_f64),
+        );
+        self.input.pointer_pos_points = Some(pos);
+        self.input.events.push(egui::Event::PointerMoved(pos));
+    }
+
+    /// Queue a pointer-gone event and forget the position.
+    fn on_cursor_left(&mut self) {
+        self.input.pointer_pos_points = None;
+        self.input.events.push(egui::Event::PointerGone);
+    }
+
+    /// Queue a mouse button press or release at the known position.
+    ///
+    /// Buttons without a known cursor position are dropped rather than
+    /// guessed; unmapped extra buttons are ignored.
+    fn on_mouse_button(&mut self, state: ElementState, button: MouseButton) {
+        let mapped: Option<egui::PointerButton> = match button {
+            MouseButton::Left => Some(egui::PointerButton::Primary),
+            MouseButton::Right => Some(egui::PointerButton::Secondary),
+            MouseButton::Middle => Some(egui::PointerButton::Middle),
+            MouseButton::Back => Some(egui::PointerButton::Extra1),
+            MouseButton::Forward => Some(egui::PointerButton::Extra2),
+            MouseButton::Other(_) => None,
+        };
+        let (Some(mapped_button), Some(pos)) = (mapped, self.input.pointer_pos_points) else {
+            return;
+        };
+        self.input.events.push(egui::Event::PointerButton {
+            pos,
+            button: mapped_button,
+            pressed: state == ElementState::Pressed,
+            modifiers: self.input.modifiers,
+        });
+    }
+
+    /// Queue a mouse wheel scroll with the current modifiers.
+    fn on_wheel(&mut self, delta: MouseScrollDelta, phase: WinitTouchPhase) {
+        let scale_f64 = self.window.scale_factor();
+        let (unit, scrolled) = match delta {
+            MouseScrollDelta::LineDelta(x_f32, y_f32) => {
+                (egui::MouseWheelUnit::Line, egui::vec2(x_f32, y_f32))
+            }
+            MouseScrollDelta::PixelDelta(position) => (
+                egui::MouseWheelUnit::Point,
+                egui::vec2(
+                    physical_px_to_points_f32(position.x, scale_f64),
+                    physical_px_to_points_f32(position.y, scale_f64),
+                ),
+            ),
+        };
+        let mapped_phase = match phase {
+            WinitTouchPhase::Started => egui::TouchPhase::Start,
+            WinitTouchPhase::Moved => egui::TouchPhase::Move,
+            WinitTouchPhase::Ended => egui::TouchPhase::End,
+            WinitTouchPhase::Cancelled => egui::TouchPhase::Cancel,
+        };
+        self.input.events.push(egui::Event::MouseWheel {
+            unit,
+            delta: scrolled,
+            phase: mapped_phase,
+            modifiers: self.input.modifiers,
+        });
+    }
+
+    /// Advance the demo sim under pause plus step plus warp control.
+    ///
+    /// Paused shells advance only on an explicit step; running shells scale
+    /// wall time by the requested warp factor with per-frame catch-up capped
+    /// by [`MAX_CATCH_UP_STEPS_PER_FRAME_U64`]. The demo orbit always cruises,
+    /// so snapshot warp context stays cruise.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OsWindowError`] for sim-step or snapshot failures.
+    fn advance_sim(&mut self) -> Result<(), OsWindowError> {
+        if self.shell.shell().top_bar().is_paused() {
+            if self.shell.shell_mut().top_bar_mut().take_step() {
+                self.step_sim_once()?;
+            }
+            return Ok(());
+        }
+        let factor_f64 = self.shell.shell().top_bar().requested_warp().factor();
+        self.clocks.accumulator_s_f64 += self.clocks.frame_dt_s_f64 * factor_f64;
+        let mut steps_u64 = 0_u64;
+        while self.clocks.accumulator_s_f64 >= SIM_TICK_S.value()
+            && steps_u64 < MAX_CATCH_UP_STEPS_PER_FRAME_U64
+        {
+            self.step_sim_once()?;
+            self.clocks.accumulator_s_f64 -= SIM_TICK_S.value();
+            steps_u64 += 1;
+        }
+        if steps_u64 >= MAX_CATCH_UP_STEPS_PER_FRAME_U64 {
+            self.clocks.accumulator_s_f64 = 0.0;
+        }
+        Ok(())
+    }
+
+    /// Step the scheduler plus state once and observe the snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OsWindowError`] for sim-step, snapshot, or shell failures.
+    fn step_sim_once(&mut self) -> Result<(), OsWindowError> {
+        self.sim.scheduler.advance();
+        let sample = engine::trajectory::step_point_ship(
+            &self.sim.state,
+            SIM_TICK_S,
+            &self.sim.body,
+            &self.sim.atmosphere,
+            &self.sim.vehicle,
+            self.sim.mu,
+        )
+        .map_err(|error| OsWindowError::SimStep(error.to_string()))?;
+        self.sim.state = sample.state;
+        self.sim.stream_seed_u64 =
+            engine::generation::mix_seed(self.sim.stream_seed_u64, self.sim.scheduler.step_count());
+        let requested_warp = self.shell.shell().top_bar().requested_warp();
+        let snapshot = engine::inspect::capture_snapshot(
+            &self.sim.scheduler,
+            &self.sim.state,
+            &self.sim.body,
+            &self.sim.atmosphere,
+            &self.sim.vehicle,
+            self.sim.master_seed_u64,
+            self.sim.stream_seed_u64,
+            requested_warp,
+            true,
+            false,
+            false,
+        )?;
+        self.shell.shell_mut().observe_snapshot(&snapshot)?;
+        Ok(())
+    }
+
+    /// Run one redraw: clocks, sim, egui pass, and wgpu present.
+    ///
+    /// Surface loss reconfigures and skips the frame; occlusion plus timeout
+    /// skips without error; shell or sim failures return for the caller to
+    /// park as fatal and exit.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OsWindowError`] for sim, snapshot, or shell failures.
+    fn redraw(&mut self) -> Result<(), OsWindowError> {
+        self.tick_clocks();
+        self.advance_sim()?;
+        let size = self.window.inner_size();
+        if size.width < MIN_SURFACE_EXTENT_PX_U32 || size.height < MIN_SURFACE_EXTENT_PX_U32 {
+            return Ok(());
+        }
+        if size.width != self.surface_config.width || size.height != self.surface_config.height {
+            self.on_resized(size.width, size.height);
+        }
+        let scale_f64 = self.window.scale_factor();
+        let output = self.run_shell_pass(size, scale_f64)?;
+        self.present_frame(output, size, scale_f64);
+        Ok(())
+    }
+
+    /// Advance wall clocks and sample the frame time.
+    ///
+    /// Feeds the budget-strip frame badge; unusable deltas are skipped
+    /// without touching shell state.
+    fn tick_clocks(&mut self) {
+        let now = Instant::now();
+        let frame_dt_s_f64 = now.duration_since(self.clocks.last).as_secs_f64();
+        self.clocks.last = now;
+        self.clocks.elapsed_s_f64 = now.duration_since(self.clocks.start).as_secs_f64();
+        self.clocks.frame_dt_s_f64 = frame_dt_s_f64;
+        let frame_ms_f64 = frame_dt_s_f64 * MILLIS_PER_SECOND_F64;
+        if frame_ms_f64.is_finite() && frame_ms_f64 >= 0.0 {
+            let _ = self
+                .shell
+                .shell_mut()
+                .budget_strip_mut()
+                .set_frame_ms_f64(frame_ms_f64);
+        }
+    }
+
+    /// Run the immediate-mode shell pass and return its output.
+    ///
+    /// Drains accumulated input into one [`DesktopWindow`](crate::shell::DesktopWindow)
+    /// draw through the measured cost hook. Export requests stay deferred:
+    /// bundle identity needs the game loop.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OsWindowError`] for shell draw failures.
+    fn run_shell_pass(
+        &mut self,
+        size: PhysicalSize<u32>,
+        scale_f64: f64,
+    ) -> Result<egui::FullOutput, OsWindowError> {
+        let raw_input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(
+                    physical_px_to_points_f32(f64::from(size.width), scale_f64),
+                    physical_px_to_points_f32(f64::from(size.height), scale_f64),
+                ),
+            )),
+            time: Some(self.clocks.elapsed_s_f64),
+            events: core::mem::take(&mut self.input.events),
+            ..Default::default()
+        };
+        let mut shell_error: Option<ShellError> = None;
+        let budgets = self.budgets;
+        let pass_ctx = self.egui.clone();
+        let output = pass_ctx.run_ui(raw_input, |ui| {
+            match self
+                .shell
+                .draw_measured(&pass_ctx, ui, FRAME_BUDGET_MS_F64, budgets, false)
+            {
+                Ok(_action) => {}
+                Err(error) => {
+                    shell_error = Some(error);
+                }
+            }
+        });
+        if let Some(error) = shell_error {
+            return Err(OsWindowError::Shell(error));
+        }
+        Ok(output)
+    }
+
+    /// Present one shell output frame through the wgpu surface.
+    ///
+    /// Uploads texture deltas, tessellates, acquires the next surface
+    /// texture, renders the shell pass, and presents. Surface loss
+    /// reconfigures and skips; occlusion plus timeout skips silently.
+    fn present_frame(&mut self, output: egui::FullOutput, size: PhysicalSize<u32>, scale_f64: f64) {
+        for (texture_id, image_deltas) in &output.textures_delta.set {
+            for image_delta in image_deltas {
+                self.renderer
+                    .update_texture(&self.device, &self.queue, *texture_id, image_delta);
+            }
+        }
+        for texture_id in &output.textures_delta.free {
+            self.renderer.free_texture(texture_id);
+        }
+        let pixels_per_point_f32 = pixels_per_point_f32(scale_f64);
+        let paint_jobs = self.egui.tessellate(output.shapes, output.pixels_per_point);
+        let screen_descriptor = egui_wgpu::ScreenDescriptor {
+            size_in_pixels: [size.width, size.height],
+            pixels_per_point: pixels_per_point_f32,
+        };
+        let frame = match self.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(frame)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
+            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
+                self.on_resized(size.width, size.height);
+                return;
+            }
+            wgpu::CurrentSurfaceTexture::Timeout
+            | wgpu::CurrentSurfaceTexture::Occluded
+            | wgpu::CurrentSurfaceTexture::Validation => return,
+        };
+        let view = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("os-window-egui-encoder"),
+            });
+        let user_buffers = self.renderer.update_buffers(
+            &self.device,
+            &self.queue,
+            &mut encoder,
+            &paint_jobs,
+            &screen_descriptor,
+        );
+        {
+            let pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("os-window-egui-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(clear_color_f64()),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            self.renderer
+                .render(&mut pass.forget_lifetime(), &paint_jobs, &screen_descriptor);
+        }
+        self.queue.submit(
+            user_buffers
+                .into_iter()
+                .chain(std::iter::once(encoder.finish())),
+        );
+        self.queue.present(frame);
+    }
+}
+
+/// Convert a physical pixel measure into egui points.
+///
+/// Divides by the OS scale factor; unusable scales fall back to
+/// [`FALLBACK_PIXELS_PER_POINT_F64`].
+#[must_use]
+pub fn physical_px_to_points_f32(physical_px_f64: f64, scale_factor_f64: f64) -> f32 {
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "egui points are f32; sub-pixel loss is invisible"
+    )]
+    let points_f32 = (physical_px_f64 / sanitized_scale_f64(scale_factor_f64)) as f32;
+    points_f32
+}
+
+/// Convert an OS scale factor into egui pixels-per-point.
+///
+/// Falls back to [`FALLBACK_PIXELS_PER_POINT_F64`] for non-finite or
+/// non-positive scales.
+#[must_use]
+pub fn pixels_per_point_f32(scale_factor_f64: f64) -> f32 {
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "DPI scale sits near 1; f32 precision suffices for egui"
+    )]
+    let narrowed_f32 = sanitized_scale_f64(scale_factor_f64) as f32;
+    narrowed_f32
+}
+
+/// Sanitize an OS scale factor to a strictly positive finite value.
+///
+/// Returns the scale unchanged when finite and positive, else
+/// [`FALLBACK_PIXELS_PER_POINT_F64`].
+fn sanitized_scale_f64(scale_factor_f64: f64) -> f64 {
+    if scale_factor_f64.is_finite() && scale_factor_f64 > 0.0 {
+        scale_factor_f64
+    } else {
+        FALLBACK_PIXELS_PER_POINT_F64
+    }
+}
+
+/// Build the opaque clear color from the DevDark-Pro base.
+///
+/// Channels convert as gamma-space values matching the theme swatch; the
+/// exact output curve stays deferred with the phone color checks.
+fn clear_color_f64() -> wgpu::Color {
+    let channels = BASE_BACKGROUND_RGB_U8.to_array_u8();
+    wgpu::Color {
+        r: f64::from(channels[0]) / RGB_CHANNEL_MAX_F64,
+        g: f64::from(channels[1]) / RGB_CHANNEL_MAX_F64,
+        b: f64::from(channels[2]) / RGB_CHANNEL_MAX_F64,
+        a: CLEAR_ALPHA_F64,
+    }
+}
+
+/// Park the current thread until an init future resolves.
+///
+/// Init-time only: adapter plus device requests park here during resume. The
+/// frame loop never blocks; wgpu wakes the parker from its worker threads.
+///
+/// [`Future`]: std::future::Future
+fn block_on_init<Fut>(future: Fut) -> Fut::Output
+where
+    Fut: Future,
+{
+    /// Waker parking the init thread until wgpu workers resolve.
+    struct ParkWaker {
+        /// Thread to unpark on wake.
+        owner: thread::Thread,
+    }
+
+    impl Wake for ParkWaker {
+        fn wake(self: Arc<Self>) {
+            self.owner.unpark();
+        }
+    }
+
+    let waker: Waker = Waker::from(Arc::new(ParkWaker {
+        owner: thread::current(),
+    }));
+    let mut context = TaskContext::from_waker(&waker);
+    let mut pinned = pin!(future);
+    loop {
+        match pinned.as_mut().poll(&mut context) {
+            Poll::Ready(output) => return output,
+            Poll::Pending => thread::park(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SMOKE_SCALE_F64: f64 = 2.0;
+    const EXPECTED_HALF_POINTS_F32: f32 = 100.0;
+    const EXPECTED_SCALE_POINTS_F32: f32 = 2.0;
+    const EXPECTED_FALLBACK_POINTS_F32: f32 = 1.0;
+    const EXPECTED_FULL_POINTS_F32: f32 = 200.0;
+    const SMOKE_PHYSICAL_PX_F64: f64 = 200.0;
+    const POINTS_TOL_F32: f32 = 1e-6;
+
+    fn args_of(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| String::from(*value)).collect()
+    }
+
+    #[test]
+    fn flag_constant_spells_run_window() {
+        assert_eq!(RUN_WINDOW_FLAG, "--run-window");
+        assert_eq!(HeadlessReason::FlagMissing.label(), "flag-missing");
+        assert_eq!(HeadlessReason::DisplayMissing.label(), "display-missing");
+    }
+
+    #[test]
+    fn launch_needs_flag_and_display() {
+        let flagged = args_of(&["universe-debug", "--run-window"]);
+        assert_eq!(
+            decide_launch_with(&flagged, true),
+            LaunchDecision::OpenWindow
+        );
+        assert_eq!(
+            decide_launch_with(&flagged, false),
+            LaunchDecision::StayHeadless(HeadlessReason::DisplayMissing)
+        );
+        let bare = args_of(&["universe-debug"]);
+        assert_eq!(
+            decide_launch_with(&bare, true),
+            LaunchDecision::StayHeadless(HeadlessReason::FlagMissing)
+        );
+        assert_eq!(
+            decide_launch_with(&bare, false),
+            LaunchDecision::StayHeadless(HeadlessReason::FlagMissing)
+        );
+        let empty: Vec<String> = Vec::new();
+        assert_eq!(
+            decide_launch_with(&empty, true),
+            LaunchDecision::StayHeadless(HeadlessReason::FlagMissing)
+        );
+    }
+
+    #[test]
+    fn display_probe_requires_a_named_display() {
+        assert!(!display_available_with(None, None));
+        assert!(!display_available_with(Some(""), None));
+        assert!(!display_available_with(None, Some("")));
+        assert!(display_available_with(Some(":0"), None));
+        assert!(display_available_with(None, Some("wayland-0")));
+        assert!(display_available_with(Some(":0"), Some("wayland-0")));
+    }
+
+    #[test]
+    fn scale_helpers_convert_and_fall_back() {
+        assert!(
+            (physical_px_to_points_f32(SMOKE_PHYSICAL_PX_F64, SMOKE_SCALE_F64)
+                - EXPECTED_HALF_POINTS_F32)
+                .abs()
+                < POINTS_TOL_F32
+        );
+        assert!(
+            (pixels_per_point_f32(SMOKE_SCALE_F64) - EXPECTED_SCALE_POINTS_F32).abs()
+                < POINTS_TOL_F32
+        );
+        assert!(
+            (pixels_per_point_f32(f64::NAN) - EXPECTED_FALLBACK_POINTS_F32).abs() < POINTS_TOL_F32
+        );
+        assert!((pixels_per_point_f32(0.0) - EXPECTED_FALLBACK_POINTS_F32).abs() < POINTS_TOL_F32);
+        assert!(
+            (physical_px_to_points_f32(SMOKE_PHYSICAL_PX_F64, f64::NAN) - EXPECTED_FULL_POINTS_F32)
+                .abs()
+                < POINTS_TOL_F32
+        );
+    }
+
+    #[test]
+    fn frame_budgets_build_for_the_window() {
+        let Ok(_budgets) = BudgetDenominators::new(
+            FRAME_BUDGET_MS_F64,
+            SIM_TICK_AVG_BUDGET_MS_F64,
+            SIM_TICK_P99_BUDGET_MS_F64,
+            SURFACE_HITCH_P95_BUDGET_MS_F64,
+            MEMORY_CEILING_MB_F64,
+            COLD_START_BUDGET_S_F64,
+        ) else {
+            panic!("window budgets must build")
+        };
+    }
+
+    #[test]
+    fn ticker_only_config_sizes_the_window() {
+        let config = crate::layout::DesktopWindowConfig::ticker_only();
+        assert!(config.width_pt_f32() > 0.0);
+        assert!(config.height_pt_f32() > 0.0);
+        assert!(!DESKTOP_WINDOW_TITLE.is_empty());
+    }
+
+    #[test]
+    fn block_on_runs_an_init_future() {
+        let output = block_on_init(async { 2_u32 + 2_u32 });
+        assert_eq!(output, 4_u32);
+    }
+
+    #[test]
+    fn headless_reason_renders_for_ci_logs() {
+        assert!(
+            HeadlessReason::FlagMissing
+                .to_string()
+                .contains(RUN_WINDOW_FLAG)
+        );
+        assert!(!HeadlessReason::DisplayMissing.to_string().is_empty());
+    }
+}

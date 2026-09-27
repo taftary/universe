@@ -142,8 +142,11 @@ as `tester_readouts` on the window). The window assembly is `DesktopWindow`
 over one `Shell` plus `DesktopWindowConfig`: opens ticker-only and blind,
 switches to the Descent preset for handoff watching, draws through the existing
 headless egui context, and records shell draw cost on every draw. The OS window
-(winit event loop plus wgpu surface plus egui-wgpu renderer) lands in a later
-step; `winit` is not in `Cargo.lock`. Desktop gate for code is PASS:
+(winit event loop plus wgpu surface plus egui-wgpu renderer) lives in
+`crates/debug/src/os_window.rs` (Step 6, dev-shell only): it opens only with
+the explicit `--run-window` flag plus a display gate, drives the same
+`DesktopWindow` ticker-only on the main thread, and leaves headless gates
+green without a display. Desktop gate for code is PASS:
 headless sim smoke PASS plus DesktopTester AC4a PASS
 (`tests/legibility_descent.rs`, 5 tests) plus window-assembly headless PASS
 (`desktop_window_flies_descent_via_readouts`, `shell_draw=ok`, `desktop_tester`

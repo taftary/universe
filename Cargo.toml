@@ -52,6 +52,11 @@ libm = { version = "0.2", default-features = false }
 # backends. Engine sim stays winit-free; main thread owns winit per
 # docs/tech/architecture.md.
 winit = "0.30.13"
+# D-003 first use (#44 Step 6): wgpu 30.0.1 surface plus device for the debug
+# OS window behind `dev-shell`. Default features; versions stay on the locked
+# 30.0 line (`egui-wgpu` 0.36.2 requires wgpu ^30.0). Engine sim stays
+# wgpu-free; main thread owns the surface per docs/tech/architecture.md.
+wgpu = "30"
 universe-engine = { path = "crates/engine" }
 universe-game = { path = "crates/game" }
 

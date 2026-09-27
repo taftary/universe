@@ -14,6 +14,8 @@ mod input;
 mod inspect_view;
 mod layout;
 mod log;
+#[cfg(feature = "dev-shell")]
+mod os_window;
 mod shell;
 mod shell_cost;
 mod theme;
@@ -86,6 +88,12 @@ static GLOBAL_ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
 ///
 /// Returns the engine error when the demo step is rejected.
 fn main() -> anyhow::Result<()> {
+    #[cfg(feature = "dev-shell")]
+    {
+        if run_dev_shell_window()? {
+            return Ok(());
+        }
+    }
     let span = tracing::span!(tracing::Level::INFO, "debug_ticks");
     let _guard = span.enter();
     let mut scheduler = engine::sim::Scheduler::new(engine::sim::SIM_TICK_S)?;
@@ -104,6 +112,29 @@ fn main() -> anyhow::Result<()> {
     print_inspect_smoke();
     print_shell_smoke();
     Ok(())
+}
+
+/// Open the OS window when flagged, else report headless.
+///
+/// Returns true when the window ran; false keeps the headless demo.
+/// Available only with the non-default `dev-shell` feature.
+///
+/// # Errors
+///
+/// Returns the OS window error when the flagged run fails.
+#[cfg(feature = "dev-shell")]
+fn run_dev_shell_window() -> anyhow::Result<bool> {
+    let args: Vec<String> = std::env::args().collect();
+    match os_window::decide_launch(&args) {
+        os_window::LaunchDecision::OpenWindow => {
+            os_window::run_window()?;
+            Ok(true)
+        }
+        os_window::LaunchDecision::StayHeadless(reason) => {
+            println!("headless reason={reason}");
+            Ok(false)
+        }
+    }
 }
 
 /// Print the DevDark-Pro proposal with accents, fonts, and bands.

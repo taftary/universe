@@ -2133,6 +2133,7 @@ dependencies = [
  "mimalloc",
  "tracing",
  "universe-engine",
+ "wgpu",
  "winit",
 ]
 

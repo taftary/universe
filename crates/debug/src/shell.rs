@@ -1176,20 +1176,11 @@ impl Shell {
 /// opens ticker-only and blind, watches the Descent preset, flies through
 /// [`DesktopTesterReadouts`], and records shell draw cost on every draw.
 /// Content never forks between presets; preset switches only change dock
-/// visibility plus the default bottom tab. The OS window itself (winit event
-/// loop plus wgpu surface plus egui-wgpu renderer) lands in a later step
-/// under D-003; this assembly draws through the existing headless egui
-/// context meanwhile, so no new dependency enters the lockfile (`winit` is
-/// not in `Cargo.lock`). Available only with the non-default `dev-shell`
-/// feature.
+/// visibility plus the default bottom tab. The OS window (winit event loop
+/// plus wgpu surface plus egui-wgpu renderer) lives in `os_window` under
+/// D-003 and drives this assembly; headless tests keep the egui-context path.
+/// Available only with the non-default `dev-shell` feature.
 #[cfg(feature = "dev-shell")]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "OS window wiring lands in a later step; unit tests cover the assembly meanwhile."
-    )
-)]
 #[derive(Debug, Clone)]
 pub struct DesktopWindow {
     /// Owned shell assembly with run control plus inspect.
@@ -1203,7 +1194,7 @@ pub struct DesktopWindow {
     not(test),
     expect(
         dead_code,
-        reason = "OS window wiring lands in a later step; unit tests cover the assembly meanwhile."
+        reason = "Close plus preset plus tester methods wire in a later step; unit tests cover them meanwhile."
     )
 )]
 impl DesktopWindow {
