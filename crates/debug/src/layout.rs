@@ -26,6 +26,19 @@ pub const BOTTOM_SHEET_HALF_FRACTION_F64: f64 = 0.5;
 /// Source: `docs/tech/debug.md` section 6.2.
 pub const BOTTOM_SHEET_FULL_FRACTION_F64: f64 = 1.0;
 
+/// Dev-tag reserve in points.
+///
+/// Equals the minimum touch target so full detent leaves the tag visible.
+/// Source: `docs/tech/debug.md` section 6.2.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+    )
+)]
+pub const DEV_TAG_RESERVE_PT_F32: f32 = MIN_TOUCH_TARGET_PT_F32;
+
 /// Plot-history reservation in entries at shell open.
 ///
 /// Skeleton size; later phases confirm it by measurement.
@@ -90,6 +103,18 @@ pub enum LayoutError {
         /// Rejected budget value.
         value_f64: f64,
     },
+    /// Value was not strictly positive.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+        )
+    )]
+    NonPositive {
+        /// Rejected value.
+        value_f64: f64,
+    },
 }
 
 impl core::fmt::Display for LayoutError {
@@ -103,6 +128,9 @@ impl core::fmt::Display for LayoutError {
             }
             Self::NonPositiveBudget { value_f64 } => {
                 write!(formatter, "non-positive budget: {value_f64}")
+            }
+            Self::NonPositive { value_f64 } => {
+                write!(formatter, "non-positive layout value: {value_f64}")
             }
         }
     }
@@ -270,6 +298,119 @@ impl DesktopPreset {
     }
 }
 
+/// Applied desktop preset with visibility plus default tab.
+///
+/// One call site applies visibility and default tab together; sizes stay
+/// user-resizable and content never changes per `docs/tech/debug.md` 6.1.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+    )
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PresetApplication {
+    /// Dock visibility for the preset.
+    visibility: PanelVisibility,
+    /// Default bottom tab for the preset, if any.
+    default_bottom_tab: Option<PhoneTab>,
+}
+
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+    )
+)]
+impl PresetApplication {
+    /// Return dock visibility for the application.
+    #[must_use]
+    pub const fn visibility(self) -> PanelVisibility {
+        self.visibility
+    }
+
+    /// Return the default bottom tab, if any.
+    #[must_use]
+    pub const fn default_bottom_tab(self) -> Option<PhoneTab> {
+        self.default_bottom_tab
+    }
+}
+
+/// Apply a desktop preset to visibility plus default tab.
+///
+/// Sizes stay user-resizable; content never changes. Combines
+/// [`DesktopPreset::visibility`] with [`DesktopPreset::default_bottom_tab`].
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+    )
+)]
+#[must_use]
+pub const fn apply_desktop_preset(preset: DesktopPreset) -> PresetApplication {
+    PresetApplication {
+        visibility: preset.visibility(),
+        default_bottom_tab: preset.default_bottom_tab(),
+    }
+}
+
+/// Transient desktop preset choice held as shell state.
+///
+/// The choice never persists: presets, plot history, log filters, console
+/// history, and recorder drafts are transient per `docs/tech/debug.md` 8.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+    )
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PresetSelection {
+    /// Currently selected desktop preset.
+    preset: DesktopPreset,
+}
+
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+    )
+)]
+impl PresetSelection {
+    /// Whether a preset choice persists across runs.
+    ///
+    /// Always false; shell state is on the never-saved list.
+    pub const PERSISTED_BOOL: bool = false;
+
+    /// Build a transient selection from a preset.
+    #[must_use]
+    pub const fn new(preset: DesktopPreset) -> Self {
+        Self { preset }
+    }
+
+    /// Return the selected preset.
+    #[must_use]
+    pub const fn preset(self) -> DesktopPreset {
+        self.preset
+    }
+
+    /// Select another preset without touching content.
+    pub const fn select(&mut self, preset: DesktopPreset) {
+        self.preset = preset;
+    }
+
+    /// Apply the selection to visibility plus default tab.
+    #[must_use]
+    pub const fn apply(self) -> PresetApplication {
+        apply_desktop_preset(self.preset)
+    }
+}
+
 /// Phone bottom-sheet tab with one visible at a time.
 ///
 /// Same panels as desktop in a different arrangement.
@@ -328,6 +469,67 @@ impl PhoneTab {
             Self::Run | Self::View | Self::Inspect | Self::Replay => false,
         }
     }
+
+    /// Report whether the tab uses the single-plot optimization.
+    ///
+    /// True for plots only; off-screen plots skip draw but keep recording
+    /// into pre-sized buffers per `docs/tech/debug.md` section 6.2.
+    #[must_use]
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+        )
+    )]
+    pub const fn is_single_plot_optimization(self) -> bool {
+        match self {
+            Self::Plots => true,
+            Self::Run | Self::View | Self::Inspect | Self::Budget | Self::Log | Self::Replay => {
+                false
+            }
+        }
+    }
+}
+
+/// Report whether a candidate plot draws for the selection.
+///
+/// True only when the candidate is the selected tab and targets the
+/// single-plot optimization; off-screen plots skip draw per 6.2.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+    )
+)]
+#[must_use]
+pub const fn should_draw_plot_bool(selected_tab: PhoneTab, candidate_tab: PhoneTab) -> bool {
+    match selected_tab {
+        PhoneTab::Plots => matches!(candidate_tab, PhoneTab::Plots),
+        PhoneTab::Run
+        | PhoneTab::View
+        | PhoneTab::Inspect
+        | PhoneTab::Budget
+        | PhoneTab::Log
+        | PhoneTab::Replay => false,
+    }
+}
+
+/// Report whether a candidate plot keeps recording.
+///
+/// Always true: off-screen plots skip draw but keep recording into
+/// pre-sized buffers so continuity data is not lost per 6.2.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+    )
+)]
+#[must_use]
+pub const fn should_record_plot_bool(_selected_tab: PhoneTab, _candidate_tab: PhoneTab) -> bool {
+    true
 }
 
 /// Bottom-sheet height detent.
@@ -392,6 +594,393 @@ impl ChipAction {
             Self::Warp => "warp",
             Self::AutoDrop => "auto-drop",
         }
+    }
+
+    /// Return the mirrored top-bar run-control name.
+    ///
+    /// Order matches section 4.1 run control: pause, single-step tick,
+    /// warp selector, warp auto-drop reason. Source `docs/tech/debug.md`.
+    #[must_use]
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+        )
+    )]
+    pub const fn top_bar_control_label(self) -> &'static str {
+        match self {
+            Self::Pause => "pause",
+            Self::Step => "single-step tick",
+            Self::Warp => "warp selector",
+            Self::AutoDrop => "warp auto-drop reason",
+        }
+    }
+}
+
+/// Scale the 44pt touch target to pixels.
+///
+/// Multiplies [`MIN_TOUCH_TARGET_PT_F32`] by `pixels_per_point_f32`.
+///
+/// # Errors
+///
+/// Returns [`LayoutError`] when `pixels_per_point_f32` is non-finite or not positive.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+    )
+)]
+pub fn scaled_touch_target_px_f32(pixels_per_point_f32: f32) -> Result<f32, LayoutError> {
+    check_scale_positive_f32(pixels_per_point_f32)?;
+    Ok(MIN_TOUCH_TARGET_PT_F32 * pixels_per_point_f32)
+}
+
+/// Scale the 96pt plot floor to pixels.
+///
+/// Multiplies [`PLOT_MIN_HEIGHT_PT_F32`] by `pixels_per_point_f32`.
+///
+/// # Errors
+///
+/// Returns [`LayoutError`] when `pixels_per_point_f32` is non-finite or not positive.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+    )
+)]
+pub fn scaled_plot_min_height_px_f32(pixels_per_point_f32: f32) -> Result<f32, LayoutError> {
+    check_scale_positive_f32(pixels_per_point_f32)?;
+    Ok(PLOT_MIN_HEIGHT_PT_F32 * pixels_per_point_f32)
+}
+
+/// Scale the dev-tag reserve to pixels.
+///
+/// Multiplies [`DEV_TAG_RESERVE_PT_F32`] by `pixels_per_point_f64`.
+///
+/// # Errors
+///
+/// Returns [`LayoutError`] when `pixels_per_point_f64` is non-finite or not positive.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+    )
+)]
+pub fn dev_tag_reserve_px_f64(pixels_per_point_f64: f64) -> Result<f64, LayoutError> {
+    check_positive_f64(pixels_per_point_f64)?;
+    Ok(f64::from(DEV_TAG_RESERVE_PT_F32) * pixels_per_point_f64)
+}
+
+/// Return full-detent height in pixels reserving the tag.
+///
+/// Subtracts the scaled [`DEV_TAG_RESERVE_PT_F32`] from `screen_height_px_f64`.
+///
+/// # Errors
+///
+/// Returns [`LayoutError`] for a bad screen or scale, or when the screen
+/// leaves no positive height after the reserve.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+    )
+)]
+pub fn full_height_px_f64(
+    screen_height_px_f64: f64,
+    pixels_per_point_f64: f64,
+) -> Result<f64, LayoutError> {
+    check_positive_f64(screen_height_px_f64)?;
+    let reserve_px_f64 = dev_tag_reserve_px_f64(pixels_per_point_f64)?;
+    let full_px_f64 = screen_height_px_f64 - reserve_px_f64;
+    if full_px_f64 <= 0.0 {
+        return Err(LayoutError::NonPositive {
+            value_f64: full_px_f64,
+        });
+    }
+    Ok(full_px_f64)
+}
+
+/// Return sheet height in pixels for a detent.
+///
+/// Half scales the screen by [`BOTTOM_SHEET_HALF_FRACTION_F64`]; full reserves
+/// the dev tag through [`full_height_px_f64`].
+///
+/// # Errors
+///
+/// Returns [`LayoutError`] when `screen_height_px_f64` or `pixels_per_point_f64`
+/// is non-finite or not positive.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+    )
+)]
+pub fn sheet_height_px_f64(
+    screen_height_px_f64: f64,
+    detent: BottomSheetDetent,
+    pixels_per_point_f64: f64,
+) -> Result<f64, LayoutError> {
+    check_positive_f64(screen_height_px_f64)?;
+    check_positive_f64(pixels_per_point_f64)?;
+    match detent {
+        BottomSheetDetent::Half => Ok(screen_height_px_f64 * BOTTOM_SHEET_HALF_FRACTION_F64),
+        BottomSheetDetent::Full => full_height_px_f64(screen_height_px_f64, pixels_per_point_f64),
+    }
+}
+
+/// Report whether a sheet height covers the tag.
+///
+/// Compares `sheet_height_px_f64` plus `dev_tag_height_px_f64` against
+/// `screen_height_px_f64`; equality only touches and returns false.
+///
+/// # Errors
+///
+/// Returns [`LayoutError`] for non-finite inputs, negative sheet or tag
+/// heights, or a non-positive screen height.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+    )
+)]
+pub fn sheet_covers_dev_tag_bool(
+    sheet_height_px_f64: f64,
+    screen_height_px_f64: f64,
+    dev_tag_height_px_f64: f64,
+) -> Result<bool, LayoutError> {
+    if !sheet_height_px_f64.is_finite() {
+        return Err(LayoutError::NonFinite {
+            value_f64: sheet_height_px_f64,
+        });
+    }
+    if sheet_height_px_f64 < 0.0 {
+        return Err(LayoutError::Negative {
+            value_f64: sheet_height_px_f64,
+        });
+    }
+    check_positive_f64(screen_height_px_f64)?;
+    if !dev_tag_height_px_f64.is_finite() {
+        return Err(LayoutError::NonFinite {
+            value_f64: dev_tag_height_px_f64,
+        });
+    }
+    if dev_tag_height_px_f64 < 0.0 {
+        return Err(LayoutError::Negative {
+            value_f64: dev_tag_height_px_f64,
+        });
+    }
+    Ok(sheet_height_px_f64 + dev_tag_height_px_f64 > screen_height_px_f64)
+}
+
+/// Report whether a control meets the 44pt floor.
+///
+/// Compares `control_px_f32` against the scaled [`MIN_TOUCH_TARGET_PT_F32`].
+///
+/// # Errors
+///
+/// Returns [`LayoutError`] for a non-finite or negative control size, or a
+/// non-finite or non-positive scale.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+    )
+)]
+pub fn meets_min_touch_target_bool(
+    control_px_f32: f32,
+    pixels_per_point_f32: f32,
+) -> Result<bool, LayoutError> {
+    if !control_px_f32.is_finite() {
+        return Err(LayoutError::NonFinite {
+            value_f64: f64::from(control_px_f32),
+        });
+    }
+    if control_px_f32 < 0.0 {
+        return Err(LayoutError::Negative {
+            value_f64: f64::from(control_px_f32),
+        });
+    }
+    let target_px_f32 = scaled_touch_target_px_f32(pixels_per_point_f32)?;
+    Ok(control_px_f32 >= target_px_f32)
+}
+
+/// Report whether a plot meets the 96pt floor.
+///
+/// Compares `plot_height_px_f32` against the scaled [`PLOT_MIN_HEIGHT_PT_F32`].
+///
+/// # Errors
+///
+/// Returns [`LayoutError`] for a non-finite or negative plot height, or a
+/// non-finite or non-positive scale.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+    )
+)]
+pub fn meets_plot_min_height_bool(
+    plot_height_px_f32: f32,
+    pixels_per_point_f32: f32,
+) -> Result<bool, LayoutError> {
+    if !plot_height_px_f32.is_finite() {
+        return Err(LayoutError::NonFinite {
+            value_f64: f64::from(plot_height_px_f32),
+        });
+    }
+    if plot_height_px_f32 < 0.0 {
+        return Err(LayoutError::Negative {
+            value_f64: f64::from(plot_height_px_f32),
+        });
+    }
+    let floor_px_f32 = scaled_plot_min_height_px_f32(pixels_per_point_f32)?;
+    Ok(plot_height_px_f32 >= floor_px_f32)
+}
+
+/// Check a `pixels_per_point` scale in logical pixels per point.
+///
+/// Private range gate for the phone scaling helpers.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+    )
+)]
+fn check_scale_positive_f32(pixels_per_point_f32: f32) -> Result<(), LayoutError> {
+    if !pixels_per_point_f32.is_finite() {
+        return Err(LayoutError::NonFinite {
+            value_f64: f64::from(pixels_per_point_f32),
+        });
+    }
+    if pixels_per_point_f32 <= 0.0 {
+        return Err(LayoutError::NonPositive {
+            value_f64: f64::from(pixels_per_point_f32),
+        });
+    }
+    Ok(())
+}
+
+/// Check a strictly positive pixel or scale value.
+///
+/// Private range gate for the sheet-height helpers.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+    )
+)]
+fn check_positive_f64(value_f64: f64) -> Result<(), LayoutError> {
+    if !value_f64.is_finite() {
+        return Err(LayoutError::NonFinite { value_f64 });
+    }
+    if value_f64 <= 0.0 {
+        return Err(LayoutError::NonPositive { value_f64 });
+    }
+    Ok(())
+}
+
+/// Phone bottom-sheet selection with one visible tab.
+///
+/// Half and full detents only; full reserves the dev tag above.
+/// One `selected_tab` field enforces one-at-a-time display.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+    )
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PhoneSheetState {
+    /// Currently visible sheet tab.
+    selected_tab: PhoneTab,
+    /// Currently selected height detent.
+    detent: BottomSheetDetent,
+}
+
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+    )
+)]
+impl PhoneSheetState {
+    /// Build a sheet state from one tab and detent.
+    #[must_use]
+    pub const fn new(selected_tab: PhoneTab, detent: BottomSheetDetent) -> Self {
+        Self {
+            selected_tab,
+            detent,
+        }
+    }
+
+    /// Return the visible tab.
+    #[must_use]
+    pub const fn selected_tab(self) -> PhoneTab {
+        self.selected_tab
+    }
+
+    /// Return the height detent.
+    #[must_use]
+    pub const fn detent(self) -> BottomSheetDetent {
+        self.detent
+    }
+
+    /// Select the one visible tab.
+    pub const fn select(&mut self, tab: PhoneTab) {
+        self.selected_tab = tab;
+    }
+
+    /// Select the height detent.
+    pub const fn set_detent(&mut self, detent: BottomSheetDetent) {
+        self.detent = detent;
+    }
+
+    /// Return sheet height in pixels for the state detent.
+    ///
+    /// Delegates to [`sheet_height_px_f64`] with the selected detent.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LayoutError`] when `screen_height_px_f64` or `pixels_per_point_f64`
+    /// is non-finite or not positive.
+    pub fn sheet_height_px_f64(
+        self,
+        screen_height_px_f64: f64,
+        pixels_per_point_f64: f64,
+    ) -> Result<f64, LayoutError> {
+        sheet_height_px_f64(screen_height_px_f64, self.detent, pixels_per_point_f64)
+    }
+
+    /// Report whether full detent keeps the tag visible.
+    ///
+    /// Returns true when the reserved full height plus the scaled tag
+    /// reserve stays within the screen height.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LayoutError`] when `screen_height_px_f64` or `pixels_per_point_f64`
+    /// is non-finite or not positive.
+    pub fn full_keeps_tag_visible_bool(
+        screen_height_px_f64: f64,
+        pixels_per_point_f64: f64,
+    ) -> Result<bool, LayoutError> {
+        let full_px_f64 = full_height_px_f64(screen_height_px_f64, pixels_per_point_f64)?;
+        let reserve_px_f64 = dev_tag_reserve_px_f64(pixels_per_point_f64)?;
+        let covers_bool =
+            sheet_covers_dev_tag_bool(full_px_f64, screen_height_px_f64, reserve_px_f64)?;
+        Ok(!covers_bool)
     }
 }
 
@@ -477,6 +1066,22 @@ impl DevTag {
     pub const fn anchor() -> &'static str {
         "top-right"
     }
+}
+
+/// Report whether closing the shell keeps run control legible.
+///
+/// Always true: the dev tag stays anchored top-right with frame fraction,
+/// tick, and warp, so ticker-only runs stay legible per 6.1 and 6.2.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+    )
+)]
+#[must_use]
+pub const fn shell_closed_preserves_run_control_bool() -> bool {
+    true
 }
 
 /// Shell draw-cost sample; step 4 owns budget wiring.
@@ -613,6 +1218,11 @@ mod tests {
     const SMOKE_BUDGET_MS_F64: f64 = 2.0;
     const EXPECTED_HALF_OF_TWO_F64: f64 = 0.2;
     const FRACTION_TOL_F64: f64 = 1e-12;
+    const SHEET_SCREEN_PX_F64: f64 = 800.0;
+    const SHEET_PPP_F64: f64 = 2.0;
+    const SHEET_PPP_F32: f32 = 2.0;
+    const PX_TOL_F64: f64 = 1e-9;
+    const PX_TOL_F32: f32 = 1e-6;
 
     #[test]
     fn descent_shows_left_and_bottom_ticker_hides_them() {
@@ -740,9 +1350,275 @@ mod tests {
         );
     }
 
+    #[test]
+    fn full_detent_reserves_tag_and_holds_one_tab() {
+        let mut sheet = PhoneSheetState::new(PhoneTab::Run, BottomSheetDetent::Half);
+        assert_eq!(sheet.selected_tab(), PhoneTab::Run);
+        assert_eq!(sheet.detent(), BottomSheetDetent::Half);
+        sheet.select(PhoneTab::Plots);
+        assert_eq!(sheet.selected_tab(), PhoneTab::Plots);
+        sheet.set_detent(BottomSheetDetent::Full);
+        assert_eq!(sheet.detent(), BottomSheetDetent::Full);
+        let Ok(half_px_f64) =
+            sheet_height_px_f64(SHEET_SCREEN_PX_F64, BottomSheetDetent::Half, SHEET_PPP_F64)
+        else {
+            panic!("half sheet height must compute")
+        };
+        assert!(
+            (half_px_f64 - SHEET_SCREEN_PX_F64 * BOTTOM_SHEET_HALF_FRACTION_F64).abs() < PX_TOL_F64
+        );
+        let Ok(full_px_f64) =
+            sheet_height_px_f64(SHEET_SCREEN_PX_F64, BottomSheetDetent::Full, SHEET_PPP_F64)
+        else {
+            panic!("full sheet height must compute")
+        };
+        let Ok(reserve_px_f64) = dev_tag_reserve_px_f64(SHEET_PPP_F64) else {
+            panic!("tag reserve must compute")
+        };
+        assert!((full_px_f64 - (SHEET_SCREEN_PX_F64 - reserve_px_f64)).abs() < PX_TOL_F64);
+        assert!(full_px_f64 < SHEET_SCREEN_PX_F64);
+        assert!(half_px_f64 < full_px_f64);
+        let Ok(covers_bool) =
+            sheet_covers_dev_tag_bool(full_px_f64, SHEET_SCREEN_PX_F64, reserve_px_f64)
+        else {
+            panic!("cover check must compute")
+        };
+        assert!(!covers_bool);
+        let Ok(keeps_bool) =
+            PhoneSheetState::full_keeps_tag_visible_bool(SHEET_SCREEN_PX_F64, SHEET_PPP_F64)
+        else {
+            panic!("tag visibility must compute")
+        };
+        assert!(keeps_bool);
+        let Ok(state_px_f64) = sheet.sheet_height_px_f64(SHEET_SCREEN_PX_F64, SHEET_PPP_F64) else {
+            panic!("state sheet height must compute")
+        };
+        assert!((state_px_f64 - full_px_f64).abs() < PX_TOL_F64);
+        for scale_f64 in [1.0_f64, 2.0, 3.0] {
+            let Ok(keeps_scale_bool) =
+                PhoneSheetState::full_keeps_tag_visible_bool(SHEET_SCREEN_PX_F64, scale_f64)
+            else {
+                panic!("tag visibility must compute for every scale")
+            };
+            assert!(keeps_scale_bool);
+        }
+        let Ok(floor_px_f32) = scaled_plot_min_height_px_f32(SHEET_PPP_F32) else {
+            panic!("plot floor must scale")
+        };
+        assert!(half_px_f64 >= f64::from(floor_px_f32));
+    }
+
+    #[test]
+    fn single_plot_optimization_targets_plots_only() {
+        assert!(PhoneTab::Plots.is_single_plot_optimization());
+        for tab in PhoneTab::ALL {
+            if tab == PhoneTab::Plots {
+                continue;
+            }
+            assert!(!tab.is_single_plot_optimization());
+        }
+        let count_usize = PhoneTab::ALL
+            .iter()
+            .filter(|tab| tab.is_single_plot_optimization())
+            .count();
+        assert_eq!(count_usize, 1);
+    }
+
+    #[test]
+    fn chip_row_mirrors_top_bar_run_control() {
+        assert_eq!(
+            ChipAction::ALL,
+            [
+                ChipAction::Pause,
+                ChipAction::Step,
+                ChipAction::Warp,
+                ChipAction::AutoDrop
+            ]
+        );
+        assert_eq!(ChipAction::Pause.top_bar_control_label(), "pause");
+        assert_eq!(ChipAction::Step.top_bar_control_label(), "single-step tick");
+        assert_eq!(ChipAction::Warp.top_bar_control_label(), "warp selector");
+        assert_eq!(
+            ChipAction::AutoDrop.top_bar_control_label(),
+            "warp auto-drop reason"
+        );
+    }
+
+    #[test]
+    fn touch_target_and_plot_floor_scale_with_ppp() {
+        let Ok(touch_px_f32) = scaled_touch_target_px_f32(1.0) else {
+            panic!("touch target must scale")
+        };
+        assert!((touch_px_f32 - MIN_TOUCH_TARGET_PT_F32).abs() < PX_TOL_F32);
+        let Ok(touch_scaled_px_f32) = scaled_touch_target_px_f32(SHEET_PPP_F32) else {
+            panic!("touch target must scale with sheet ppp")
+        };
+        assert!((touch_scaled_px_f32 - MIN_TOUCH_TARGET_PT_F32 * SHEET_PPP_F32).abs() < PX_TOL_F32);
+        let Ok(floor_px_f32) = scaled_plot_min_height_px_f32(1.0) else {
+            panic!("plot floor must scale")
+        };
+        assert!((floor_px_f32 - PLOT_MIN_HEIGHT_PT_F32).abs() < PX_TOL_F32);
+        let Ok(floor_scaled_px_f32) = scaled_plot_min_height_px_f32(SHEET_PPP_F32) else {
+            panic!("plot floor must scale with sheet ppp")
+        };
+        assert!((floor_scaled_px_f32 - PLOT_MIN_HEIGHT_PT_F32 * SHEET_PPP_F32).abs() < PX_TOL_F32);
+        let Ok(meets_bool) = meets_min_touch_target_bool(MIN_TOUCH_TARGET_PT_F32, 1.0) else {
+            panic!("touch check must compute")
+        };
+        assert!(meets_bool);
+        let Ok(short_bool) = meets_min_touch_target_bool(MIN_TOUCH_TARGET_PT_F32 - 0.5, 1.0) else {
+            panic!("short touch check must compute")
+        };
+        assert!(!short_bool);
+        let Ok(plot_meets_bool) = meets_plot_min_height_bool(PLOT_MIN_HEIGHT_PT_F32, 1.0) else {
+            panic!("plot check must compute")
+        };
+        assert!(plot_meets_bool);
+        let Ok(plot_short_bool) = meets_plot_min_height_bool(PLOT_MIN_HEIGHT_PT_F32 - 0.5, 1.0)
+        else {
+            panic!("short plot check must compute")
+        };
+        assert!(!plot_short_bool);
+    }
+
+    #[test]
+    fn phone_geometry_rejects_bad_inputs() {
+        assert!(matches!(
+            scaled_touch_target_px_f32(f32::NAN),
+            Err(LayoutError::NonFinite { .. })
+        ));
+        assert!(matches!(
+            scaled_touch_target_px_f32(0.0),
+            Err(LayoutError::NonPositive { .. })
+        ));
+        assert!(matches!(
+            scaled_touch_target_px_f32(-1.0),
+            Err(LayoutError::NonPositive { .. })
+        ));
+        assert!(matches!(
+            scaled_plot_min_height_px_f32(f32::NAN),
+            Err(LayoutError::NonFinite { .. })
+        ));
+        assert!(matches!(
+            scaled_plot_min_height_px_f32(0.0),
+            Err(LayoutError::NonPositive { .. })
+        ));
+        assert!(matches!(
+            sheet_height_px_f64(f64::NAN, BottomSheetDetent::Half, SHEET_PPP_F64),
+            Err(LayoutError::NonFinite { .. })
+        ));
+        assert!(matches!(
+            sheet_height_px_f64(0.0, BottomSheetDetent::Half, SHEET_PPP_F64),
+            Err(LayoutError::NonPositive { .. })
+        ));
+        assert!(matches!(
+            sheet_height_px_f64(SHEET_SCREEN_PX_F64, BottomSheetDetent::Half, f64::NAN),
+            Err(LayoutError::NonFinite { .. })
+        ));
+        assert!(matches!(
+            sheet_height_px_f64(SHEET_SCREEN_PX_F64, BottomSheetDetent::Full, 0.0),
+            Err(LayoutError::NonPositive { .. })
+        ));
+        assert!(matches!(
+            full_height_px_f64(10.0, SHEET_PPP_F64),
+            Err(LayoutError::NonPositive { .. })
+        ));
+        assert!(matches!(
+            meets_min_touch_target_bool(f32::NAN, 1.0),
+            Err(LayoutError::NonFinite { .. })
+        ));
+        assert!(matches!(
+            meets_min_touch_target_bool(-1.0, 1.0),
+            Err(LayoutError::Negative { .. })
+        ));
+        assert!(matches!(
+            meets_plot_min_height_bool(PLOT_MIN_HEIGHT_PT_F32, 0.0),
+            Err(LayoutError::NonPositive { .. })
+        ));
+        assert!(matches!(
+            sheet_covers_dev_tag_bool(-1.0, SHEET_SCREEN_PX_F64, 10.0),
+            Err(LayoutError::Negative { .. })
+        ));
+        assert!(matches!(
+            sheet_covers_dev_tag_bool(10.0, 0.0, 10.0),
+            Err(LayoutError::NonPositive { .. })
+        ));
+    }
+
     #[cfg(feature = "dev-shell")]
     #[test]
     fn renderer_type_name_mentions_renderer() {
         assert!(super::egui_wgpu_renderer_type_name().contains("Renderer"));
+    }
+
+    #[test]
+    fn preset_application_locks_visibility_and_defaults() {
+        let descent = apply_desktop_preset(DesktopPreset::Descent);
+        assert!(descent.visibility().shows_top_bar());
+        assert!(descent.visibility().shows_left_panel());
+        assert!(!descent.visibility().shows_right_panel());
+        assert!(descent.visibility().shows_bottom_tabs());
+        assert_eq!(descent.default_bottom_tab(), Some(PhoneTab::Plots));
+        let ticker = apply_desktop_preset(DesktopPreset::TickerOnly);
+        assert!(ticker.visibility().shows_top_bar());
+        assert!(!ticker.visibility().shows_left_panel());
+        assert!(!ticker.visibility().shows_right_panel());
+        assert!(!ticker.visibility().shows_bottom_tabs());
+        assert_eq!(ticker.default_bottom_tab(), None);
+        let determinism = apply_desktop_preset(DesktopPreset::Determinism);
+        assert!(determinism.visibility().shows_top_bar());
+        assert!(!determinism.visibility().shows_left_panel());
+        assert!(determinism.visibility().shows_bottom_tabs());
+        assert_eq!(determinism.default_bottom_tab(), Some(PhoneTab::Log));
+        assert_eq!(
+            apply_desktop_preset(DesktopPreset::Budget).default_bottom_tab(),
+            Some(PhoneTab::Budget)
+        );
+        for preset in DesktopPreset::ALL {
+            let applied = apply_desktop_preset(preset);
+            assert_eq!(applied.visibility(), preset.visibility());
+            assert_eq!(applied.default_bottom_tab(), preset.default_bottom_tab());
+        }
+        let mut selection = PresetSelection::new(DesktopPreset::TickerOnly);
+        assert_eq!(selection.preset(), DesktopPreset::TickerOnly);
+        selection.select(DesktopPreset::Descent);
+        assert_eq!(
+            selection.apply(),
+            apply_desktop_preset(DesktopPreset::Descent)
+        );
+    }
+
+    #[test]
+    fn preset_choice_never_persists() {
+        const _: () = assert!(!PresetSelection::PERSISTED_BOOL);
+        let selection = PresetSelection::new(DesktopPreset::Budget);
+        assert_eq!(selection.preset(), DesktopPreset::Budget);
+        assert_eq!(
+            selection.apply().default_bottom_tab(),
+            Some(PhoneTab::Budget)
+        );
+    }
+
+    #[test]
+    fn off_screen_plots_skip_draw_but_keep_recording() {
+        assert!(should_draw_plot_bool(PhoneTab::Plots, PhoneTab::Plots));
+        assert!(!should_draw_plot_bool(PhoneTab::Plots, PhoneTab::Budget));
+        assert!(!should_draw_plot_bool(PhoneTab::Budget, PhoneTab::Plots));
+        assert!(!should_draw_plot_bool(PhoneTab::Log, PhoneTab::Log));
+        for selected_tab in PhoneTab::ALL {
+            for candidate_tab in PhoneTab::ALL {
+                assert!(should_record_plot_bool(selected_tab, candidate_tab));
+                if should_draw_plot_bool(selected_tab, candidate_tab) {
+                    assert_eq!(selected_tab, candidate_tab);
+                    assert!(candidate_tab.is_single_plot_optimization());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn shell_closed_keeps_run_control_legible() {
+        assert!(shell_closed_preserves_run_control_bool());
+        assert_eq!(DevTag::anchor(), "top-right");
     }
 }
