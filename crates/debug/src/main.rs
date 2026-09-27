@@ -4,9 +4,13 @@
 
 #![forbid(unsafe_code)]
 
+mod bottom;
+mod budget;
+mod continuity;
 mod input;
 mod inspect_view;
 mod layout;
+mod log;
 mod shell;
 mod shell_cost;
 mod theme;
@@ -32,9 +36,33 @@ const SMOKE_ELAPSED_S_F64: f64 = 0.6;
 
 /// Smoke frame time in milliseconds.
 const SMOKE_FRAME_MS_F64: f64 = 8.0;
-
 /// Smoke frame budget denominator in milliseconds.
 const SMOKE_FRAME_BUDGET_MS_F64: f64 = 32.0;
+
+/// Smoke sim-tick average denominator in milliseconds.
+///
+/// Smoke value only; the gate lives in `docs/tech/quality.md`.
+const SMOKE_SIM_AVG_BUDGET_MS_F64: f64 = 8.0;
+
+/// Smoke sim-tick p99 denominator in milliseconds.
+///
+/// Smoke value only; the gate lives in `docs/tech/quality.md`.
+const SMOKE_SIM_P99_BUDGET_MS_F64: f64 = 16.0;
+
+/// Smoke surface-hitch p95 denominator in milliseconds.
+///
+/// Smoke value only; the gate lives in `docs/tech/quality.md`.
+const SMOKE_HITCH_BUDGET_MS_F64: f64 = 100.0;
+
+/// Smoke memory ceiling denominator in megabytes.
+///
+/// Smoke value only; the gate lives in `docs/tech/quality.md`.
+const SMOKE_MEMORY_BUDGET_MB_F64: f64 = 1024.0;
+
+/// Smoke cold-start denominator in seconds.
+///
+/// Smoke value only; the gate lives in `docs/tech/quality.md`.
+const SMOKE_COLD_START_BUDGET_S_F64: f64 = 5.0;
 
 /// Smoke master seed, dimensionless.
 const SMOKE_SEED_U64: u64 = 0x1234_ABCD_5678_EF90;
@@ -137,12 +165,35 @@ fn print_layout_smoke() {
             bottom = visibility.shows_bottom_tabs(),
             same = (direct == visibility)
         );
+        match preset.default_bottom_tab() {
+            Some(tab) => println!(
+                "preset {name} bottom_tab={tab} bottom={bottom}",
+                name = preset.label(),
+                tab = tab.label(),
+                bottom = bottom::BottomTab::default_for_preset(preset)
+                    .map_or("none", bottom::BottomTab::label)
+            ),
+            None => println!("preset {name} bottom_tab=none", name = preset.label()),
+        }
+    }
+    for tab in bottom::BottomTab::ALL {
+        println!(
+            "bottom_tab {label} phone={phone}",
+            label = tab.label(),
+            phone = tab.to_phone_tab().label()
+        );
     }
     for region in layout::DockRegion::ALL {
         println!("region {label}", label = region.label());
     }
     for tab in layout::PhoneTab::ALL {
-        println!("phone_tab {label}", label = tab.label());
+        println!(
+            "phone_tab {label} phase_b={phase_b} bottom={bottom}",
+            label = tab.label(),
+            phase_b = tab.is_phase_b(),
+            bottom =
+                bottom::BottomTab::from_phone_tab(tab).map_or("none", bottom::BottomTab::label)
+        );
     }
     for chip in layout::ChipAction::ALL {
         println!("chip {label}", label = chip.label());
@@ -613,11 +664,63 @@ fn print_shell_smoke() {
     }
 }
 
+/// Print channel, regime, level, and tier tables plus filter state.
+///
+/// Available only with the non-default `dev-shell` feature.
+#[cfg(feature = "dev-shell")]
+fn print_phase_b_tables(shell: &mut shell::Shell) {
+    for (index_usize, name) in continuity::CHANNEL_LABELS.iter().enumerate() {
+        println!("channel {name} index={index_usize}");
+    }
+    println!(
+        "channels speed={speed} pressure={pressure} temperature={temperature} density={density} heat={heat} g={g}",
+        speed = continuity::CHANNEL_SPEED_MPS_USIZE,
+        pressure = continuity::CHANNEL_PRESSURE_PA_USIZE,
+        temperature = continuity::CHANNEL_TEMPERATURE_K_USIZE,
+        density = continuity::CHANNEL_DENSITY_KG_M3_USIZE,
+        heat = continuity::CHANNEL_HEAT_W_M2_USIZE,
+        g = continuity::CHANNEL_G_LOAD_G_USIZE
+    );
+    println!(
+        "regimes orbit={orbit} atmosphere={atmo} surface={surface}",
+        orbit = continuity::CONTINUITY_REGIME_ORBIT_U8,
+        atmo = continuity::CONTINUITY_REGIME_ATMOSPHERE_U8,
+        surface = continuity::CONTINUITY_REGIME_SURFACE_U8
+    );
+    for level in log::LogLevel::ALL {
+        println!("log_level {label}", label = level.label());
+    }
+    for tier in budget::ThermalTier::ALL {
+        println!("thermal_tier {label}", label = tier.label());
+    }
+    println!(
+        "continuity empty={empty} samples={samples} log_empty={log_empty} log={log}",
+        empty = shell.continuity().is_empty(),
+        samples = shell.continuity().len_usize(),
+        log_empty = shell.trace_log().is_empty(),
+        log = shell.trace_log().len_usize()
+    );
+    shell.trace_log_mut().set_filter_level(log::LogLevel::Warn);
+    match shell.trace_log_mut().set_filter_module("sim") {
+        Ok(()) => println!(
+            "trace_filter level={level} module=sim",
+            level = shell.trace_log().filter_level().label()
+        ),
+        Err(error) => println!("trace_filter_error={error}"),
+    }
+    shell.trace_log_mut().set_filter_level(log::LogLevel::Info);
+    match shell.trace_log_mut().set_filter_module("") {
+        Ok(()) => println!("trace_filter reset=ok"),
+        Err(error) => println!("trace_filter_error={error}"),
+    }
+}
+
 /// Observe a smoke snapshot and run one headless shell draw.
 ///
 /// Available only with the non-default `dev-shell` feature.
 #[cfg(feature = "dev-shell")]
 fn print_dev_shell_snapshot_smoke(shell: &mut shell::Shell) {
+    print_phase_b_tables(shell);
     let snapshot = dev_shell_smoke_snapshot();
     match shell.observe_snapshot(&snapshot) {
         Ok(()) => println!(
@@ -630,16 +733,75 @@ fn print_dev_shell_snapshot_smoke(shell: &mut shell::Shell) {
         Err(error) => println!("shell_snapshot_error={error}"),
     }
     let ctx = egui::Context::default();
-    let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
-        shell.draw(&ctx, ui, SMOKE_FRAME_BUDGET_MS_F64);
-    });
-    // Headless smoke has no renderer; Step 5 applies texture deltas.
-    output.textures_delta.clear();
-    println!(
-        "shell_draw=ok closed={closed} mode={mode}",
-        closed = shell.is_closed(),
-        mode = shell.mode().label()
+    shell.set_visibility(layout::PanelVisibility::for_preset(
+        layout::DesktopPreset::Descent,
+    ));
+    match shell.continuity_mut().set_window_s_f64(30.0) {
+        Ok(()) => println!(
+            "continuity window_s={window} samples={samples}",
+            window = shell.continuity().window_s_f64(),
+            samples = shell.continuity().len_usize()
+        ),
+        Err(error) => println!("continuity_window_error={error}"),
+    }
+    assert!(
+        shell
+            .budget_strip_mut()
+            .set_frame_ms_f64(SMOKE_FRAME_MS_F64)
+            .is_ok()
     );
+    assert!(shell.budget_strip_mut().set_sim_avg_ms_f64(2.0).is_ok());
+    assert!(shell.budget_strip_mut().set_sim_p99_ms_f64(4.0).is_ok());
+    assert!(shell.budget_strip_mut().set_hitch_p95_ms_f64(10.0).is_ok());
+    assert!(shell.budget_strip_mut().set_resident_mb_f64(256.0).is_ok());
+    assert!(shell.budget_strip_mut().set_cold_start_s_f64(1.5).is_ok());
+    assert!(
+        shell
+            .budget_strip_mut()
+            .set_shell_ms_f64(SMOKE_DRAW_MS_F64)
+            .is_ok()
+    );
+    shell
+        .budget_strip_mut()
+        .set_thermal_tier(budget::ThermalTier::Medium);
+    match shell
+        .trace_log_mut()
+        .push(42, log::LogLevel::Info, "sim", "smoke entry")
+    {
+        Ok(()) => println!(
+            "trace_log entries={entries}",
+            entries = shell.trace_log().len_usize()
+        ),
+        Err(error) => println!("trace_log_error={error}"),
+    }
+    shell.bottom_tabs_mut().select(bottom::BottomTab::Budget);
+    match budget::BudgetDenominators::new(
+        SMOKE_FRAME_BUDGET_MS_F64,
+        SMOKE_SIM_AVG_BUDGET_MS_F64,
+        SMOKE_SIM_P99_BUDGET_MS_F64,
+        SMOKE_HITCH_BUDGET_MS_F64,
+        SMOKE_MEMORY_BUDGET_MB_F64,
+        SMOKE_COLD_START_BUDGET_S_F64,
+    ) {
+        Ok(budgets) => {
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                shell.draw(&ctx, ui, SMOKE_FRAME_BUDGET_MS_F64, budgets, false);
+            });
+            // Headless smoke has no renderer; Step 5 applies texture deltas.
+            output.textures_delta.clear();
+            println!(
+                "shell_draw=ok closed={closed} mode={mode} bottom={bottom} samples={samples} markers={markers} tier={tier} log={log}",
+                closed = shell.is_closed(),
+                mode = shell.mode().label(),
+                bottom = shell.bottom_tabs().selected().label(),
+                samples = shell.continuity().len_usize(),
+                markers = shell.continuity().markers().len(),
+                tier = shell.budget_strip().thermal_tier().label(),
+                log = shell.trace_log().len_usize()
+            );
+        }
+        Err(error) => println!("shell_budgets_error={error}"),
+    }
 }
 
 /// Build a dev-shell smoke snapshot with orbit defaults.

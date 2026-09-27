@@ -247,6 +247,21 @@ impl DesktopPreset {
             Self::TickerOnly => "ticker-only",
         }
     }
+
+    /// Return the default bottom tab for a preset.
+    ///
+    /// Descent selects plots, Budget selects budget, Determinism selects
+    /// log, and ticker-only selects none. Phase B uses the plots, budget,
+    /// and log slice only; replay and console stay deferred.
+    #[must_use]
+    pub const fn default_bottom_tab(self) -> Option<PhoneTab> {
+        match self {
+            Self::Descent => Some(PhoneTab::Plots),
+            Self::Budget => Some(PhoneTab::Budget),
+            Self::Determinism => Some(PhoneTab::Log),
+            Self::TickerOnly => None,
+        }
+    }
 }
 
 /// Phone bottom-sheet tab with one visible at a time.
@@ -293,6 +308,18 @@ impl PhoneTab {
             Self::Budget => "budget",
             Self::Log => "log",
             Self::Replay => "replay",
+        }
+    }
+
+    /// Report whether the tab ships in Phase B.
+    ///
+    /// True for plots, budget, and log only. Run, view, inspect, and
+    /// replay stay outside the Phase B bottom slice.
+    #[must_use]
+    pub const fn is_phase_b(self) -> bool {
+        match self {
+            Self::Plots | Self::Budget | Self::Log => true,
+            Self::Run | Self::View | Self::Inspect | Self::Replay => false,
         }
     }
 }
@@ -593,6 +620,28 @@ mod tests {
         assert_eq!(PhoneTab::ALL[6], PhoneTab::Replay);
         assert_eq!(DockRegion::ALL.len(), 5);
         assert_eq!(ChipAction::ALL.len(), 4);
+    }
+
+    #[test]
+    fn phase_b_tabs_and_preset_defaults() {
+        assert!(PhoneTab::Plots.is_phase_b());
+        assert!(PhoneTab::Budget.is_phase_b());
+        assert!(PhoneTab::Log.is_phase_b());
+        assert!(!PhoneTab::Run.is_phase_b());
+        assert!(!PhoneTab::Replay.is_phase_b());
+        assert_eq!(
+            DesktopPreset::Descent.default_bottom_tab(),
+            Some(PhoneTab::Plots)
+        );
+        assert_eq!(
+            DesktopPreset::Budget.default_bottom_tab(),
+            Some(PhoneTab::Budget)
+        );
+        assert_eq!(
+            DesktopPreset::Determinism.default_bottom_tab(),
+            Some(PhoneTab::Log)
+        );
+        assert_eq!(DesktopPreset::TickerOnly.default_bottom_tab(), None);
     }
 
     #[test]
