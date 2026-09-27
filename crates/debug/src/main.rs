@@ -117,6 +117,7 @@ fn main() -> anyhow::Result<()> {
 /// Open the OS window when flagged, else report headless.
 ///
 /// Returns true when the window ran; false keeps the headless demo.
+/// `--software` forces the fallback adapter with `--run-window`, else headless.
 /// Available only with the non-default `dev-shell` feature.
 ///
 /// # Errors
@@ -125,13 +126,22 @@ fn main() -> anyhow::Result<()> {
 #[cfg(feature = "dev-shell")]
 fn run_dev_shell_window() -> anyhow::Result<bool> {
     let args: Vec<String> = std::env::args().collect();
+    let software_mode_bool = os_window::software_requested(&args);
     match os_window::decide_launch(&args) {
         os_window::LaunchDecision::OpenWindow => {
-            os_window::run_window()?;
+            os_window::run_window(software_mode_bool)?;
             Ok(true)
         }
         os_window::LaunchDecision::StayHeadless(reason) => {
-            println!("headless reason={reason}");
+            if software_mode_bool && reason == os_window::HeadlessReason::FlagMissing {
+                println!(
+                    "headless reason={reason}; note={} needs {}",
+                    os_window::SOFTWARE_FLAG,
+                    os_window::RUN_WINDOW_FLAG
+                );
+            } else {
+                println!("headless reason={reason}");
+            }
             Ok(false)
         }
     }

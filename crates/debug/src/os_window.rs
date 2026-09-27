@@ -38,6 +38,11 @@ use winit::window::{Window, WindowId};
 /// The window opens only with this flag plus a display; see [`decide_launch`].
 pub const RUN_WINDOW_FLAG: &str = "--run-window";
 
+/// Command-line flag forcing the software fallback adapter.
+///
+/// Takes effect only alongside [`RUN_WINDOW_FLAG`]; see [`software_requested`].
+pub const SOFTWARE_FLAG: &str = "--software";
+
 /// Frame budget in milliseconds (`FRAME_BUDGET_MS`).
 ///
 /// Source: `docs/tech/debug.md` section 2; gates live in `docs/tech/quality.md`.
@@ -336,6 +341,14 @@ impl From<InspectError> for OsWindowError {
     }
 }
 
+/// Report whether software fallback rendering was requested.
+///
+/// True when `args` contains [`SOFTWARE_FLAG`]; window still needs [`RUN_WINDOW_FLAG`].
+#[must_use]
+pub fn software_requested(args: &[String]) -> bool {
+    args.iter().any(|arg| arg == SOFTWARE_FLAG)
+}
+
 /// Decide whether the process opens the OS window.
 ///
 /// Opens only with [`RUN_WINDOW_FLAG`] in `args` plus a display from
@@ -531,27 +544,37 @@ fn best_adapter_in_list(
 /// with a pick and logs it with [`log_adapter_info`]. When enumeration
 /// yields no compatible adapter, falls back to the hardware then software
 /// request chain under the given surface constraint, logging that winner
-/// too. The instance enables [`ADAPTER_BACKENDS_LABEL`], so Windows hosts
+/// too. With `software_mode_bool` (from [`SOFTWARE_FLAG`]) the scored
+/// enumeration plus hardware requests are skipped and the low-power
+/// force-fallback software request runs first, labeled `fallback software`.
+/// The instance enables [`ADAPTER_BACKENDS_LABEL`], so Windows hosts
 /// also reach the secondary GL path over ANGLE. When every attempt fails,
 /// returns [`OsWindowError::NoAdapter`] joining each labeled attempt with
 /// host plus headless guidance. Init-time only; the frame loop never calls this.
 fn request_adapter_with_fallbacks(
     instance: &wgpu::Instance,
     compatible_surface: Option<&wgpu::Surface<'_>>,
+    software_mode_bool: bool,
 ) -> Result<wgpu::Adapter, OsWindowError> {
     let mut reports: Vec<String> = Vec::new();
-    for (backends, backend_label) in ordered_backend_probes() {
-        let adapters = block_on_init(instance.enumerate_adapters(backends));
-        if let Some(adapter) = best_adapter_in_list(&adapters, compatible_surface) {
-            log_adapter_info(&adapter);
-            return Ok(adapter);
-        }
+    if software_mode_bool {
         reports.push(format!(
-            "{backend_label}: no compatible adapter (enumerated {}); order={ADAPTER_BACKEND_ORDER_LABEL}",
-            adapters.len()
+            "software mode ({SOFTWARE_FLAG}): skipped hardware enumeration; order={ADAPTER_BACKEND_ORDER_LABEL}"
         ));
+    } else {
+        for (backends, backend_label) in ordered_backend_probes() {
+            let adapters = block_on_init(instance.enumerate_adapters(backends));
+            if let Some(adapter) = best_adapter_in_list(&adapters, compatible_surface) {
+                log_adapter_info(&adapter);
+                return Ok(adapter);
+            }
+            reports.push(format!(
+                "{backend_label}: no compatible adapter (enumerated {}); order={ADAPTER_BACKEND_ORDER_LABEL}",
+                adapters.len()
+            ));
+        }
     }
-    let attempts: [(wgpu::PowerPreference, bool, &str); 3] = [
+    let hardware_fallback_attempts: [(wgpu::PowerPreference, bool, &str); 3] = [
         (
             wgpu::PowerPreference::HighPerformance,
             false,
@@ -564,7 +587,14 @@ fn request_adapter_with_fallbacks(
             "fallback software",
         ),
     ];
-    for (preference, fallback_bool, label) in attempts {
+    let software_attempts: [(wgpu::PowerPreference, bool, &str); 1] =
+        [(wgpu::PowerPreference::LowPower, true, "fallback software")];
+    let attempts: &[(wgpu::PowerPreference, bool, &str)] = if software_mode_bool {
+        &software_attempts
+    } else {
+        &hardware_fallback_attempts
+    };
+    for (preference, fallback_bool, label) in attempts.iter().copied() {
         let options = wgpu::RequestAdapterOptions {
             power_preference: preference,
             force_fallback_adapter: fallback_bool,
@@ -652,6 +682,8 @@ fn request_device_with_fallback(
 /// ([`ADAPTER_BACKEND_ORDER_LABEL`], Vulkan then Dx12 then Metal then GL,
 /// device score discrete then integrated then other then virtual then CPU)
 /// with no surface constraint, then the hardware-then-fallback request chain.
+/// With `software_mode_bool` (from [`SOFTWARE_FLAG`]) the probe skips hardware
+/// and requests the low-power force-fallback software adapter first.
 /// The winner logs backend, name, device type, and driver via
 /// [`log_adapter_info`]. Zero usable adapters return typed
 /// [`OsWindowError::NoAdapter`] before any window opens, so headless stays
@@ -673,9 +705,9 @@ fn request_device_with_fallback(
 /// that file. This probe keeps the graceful typed path for every failure
 /// wgpu does report, and fails fast before any window opens on hosts with
 /// zero usable adapters.
-fn preflight_adapter_probe() -> Result<(), OsWindowError> {
+fn preflight_adapter_probe(software_mode_bool: bool) -> Result<(), OsWindowError> {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-    request_adapter_with_fallbacks(&instance, None).map(|_adapter| ())
+    request_adapter_with_fallbacks(&instance, None, software_mode_bool).map(|_adapter| ())
 }
 
 /// Run the ticker-only OS window until close.
@@ -683,6 +715,9 @@ fn preflight_adapter_probe() -> Result<(), OsWindowError> {
 /// Creates the winit event loop, wgpu surface, and egui-wgpu renderer on the
 /// main thread, drives one [`DesktopWindow`](crate::shell::DesktopWindow) with
 /// a fixed-step demo orbit, and returns after close or a fatal error.
+/// With `software_mode_bool` (from [`SOFTWARE_FLAG`]) both the pre-flight
+/// probe and the window-bound adapter pick skip hardware and request the
+/// low-power force-fallback software adapter first.
 ///
 /// # Errors
 ///
@@ -690,11 +725,14 @@ fn preflight_adapter_probe() -> Result<(), OsWindowError> {
 /// device, sim, snapshot, shell, or budget failures. GPU-less hosts fail
 /// fast with typed [`OsWindowError::NoAdapter`] from the pre-flight probe
 /// before any window opens; see [`preflight_adapter_probe`].
-pub fn run_window() -> Result<(), OsWindowError> {
-    preflight_adapter_probe()?;
+pub fn run_window(software_mode_bool: bool) -> Result<(), OsWindowError> {
+    preflight_adapter_probe(software_mode_bool)?;
     let event_loop =
         EventLoop::new().map_err(|error| OsWindowError::EventLoop(error.to_string()))?;
-    let mut app = WindowApp::default();
+    let mut app = WindowApp {
+        software_mode_bool,
+        ..WindowApp::default()
+    };
     event_loop
         .run_app(&mut app)
         .map_err(|error| OsWindowError::EventLoop(error.to_string()))?;
@@ -714,6 +752,8 @@ struct WindowApp {
     active: Option<ActiveWindow>,
     /// Fatal error captured inside event callbacks, if any.
     fatal: Option<OsWindowError>,
+    /// True when [`SOFTWARE_FLAG`] forces the fallback adapter.
+    software_mode_bool: bool,
 }
 
 impl ApplicationHandler for WindowApp {
@@ -721,7 +761,7 @@ impl ApplicationHandler for WindowApp {
         if self.active.is_some() {
             return;
         }
-        match ActiveWindow::create(event_loop) {
+        match ActiveWindow::create(event_loop, self.software_mode_bool) {
             Ok(active) => {
                 event_loop.set_control_flow(ControlFlow::Poll);
                 self.active = Some(active);
@@ -918,7 +958,9 @@ impl ActiveWindow {
     /// Runs on the main thread inside resume; blocks only here while the
     /// adapter plus device resolve. The frame loop never blocks. Adapter
     /// resolution runs the scored backend enumeration plus fallback chain in
-    /// [`request_adapter_with_fallbacks`]; device resolution uses the
+    /// [`request_adapter_with_fallbacks`], or the forced low-power
+    /// force-fallback software path when `software_mode_bool` holds
+    /// ([`SOFTWARE_FLAG`]); device resolution uses the
     /// conservative descriptor plus one force-fallback retry in
     /// [`request_device_with_fallback`]. The upstream-access-violation
     /// caveat on GPU-less Windows hosts is documented on
@@ -928,7 +970,10 @@ impl ActiveWindow {
     ///
     /// Returns [`OsWindowError`] for window, surface, adapter, device,
     /// shell, sim, or budget failures.
-    fn create(event_loop: &ActiveEventLoop) -> Result<Self, OsWindowError> {
+    fn create(
+        event_loop: &ActiveEventLoop,
+        software_mode_bool: bool,
+    ) -> Result<Self, OsWindowError> {
         let shell = DesktopWindow::open()?;
         let size_config = shell.config();
         let attrs = Window::default_attributes()
@@ -946,7 +991,8 @@ impl ActiveWindow {
         let surface = instance
             .create_surface(Arc::clone(&window))
             .map_err(|error| OsWindowError::Surface(error.to_string()))?;
-        let adapter = request_adapter_with_fallbacks(&instance, Some(&surface))?;
+        let adapter =
+            request_adapter_with_fallbacks(&instance, Some(&surface), software_mode_bool)?;
         let capabilities = surface.get_capabilities(&adapter);
         let Some(format) = capabilities
             .formats
@@ -1689,5 +1735,45 @@ mod tests {
     fn best_adapter_in_empty_list_is_none() {
         let empty: Vec<wgpu::Adapter> = Vec::new();
         assert!(best_adapter_in_list(&empty, None).is_none());
+    }
+
+    #[test]
+    fn software_flag_constant_spells_software() {
+        assert_eq!(SOFTWARE_FLAG, "--software");
+    }
+
+    #[test]
+    fn software_requested_detects_flag() {
+        let bare = args_of(&["universe-debug"]);
+        assert!(!software_requested(&bare));
+        let window_only = args_of(&["universe-debug", "--run-window"]);
+        assert!(!software_requested(&window_only));
+        let software_only = args_of(&["universe-debug", "--software"]);
+        assert!(software_requested(&software_only));
+        let both = args_of(&["universe-debug", "--run-window", "--software"]);
+        assert!(software_requested(&both));
+    }
+
+    #[test]
+    fn software_alone_stays_headless_flag_missing() {
+        let software_only = args_of(&["universe-debug", "--software"]);
+        assert_eq!(
+            decide_launch_with(&software_only, true),
+            LaunchDecision::StayHeadless(HeadlessReason::FlagMissing)
+        );
+        assert_eq!(
+            decide_launch_with(&software_only, false),
+            LaunchDecision::StayHeadless(HeadlessReason::FlagMissing)
+        );
+    }
+
+    #[test]
+    fn software_with_run_window_keeps_display_gate() {
+        let both = args_of(&["universe-debug", "--run-window", "--software"]);
+        assert_eq!(decide_launch_with(&both, true), LaunchDecision::OpenWindow);
+        assert_eq!(
+            decide_launch_with(&both, false),
+            LaunchDecision::StayHeadless(HeadlessReason::DisplayMissing)
+        );
     }
 }
