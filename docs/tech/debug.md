@@ -188,6 +188,24 @@ and backend and reopen D-003 per the kill-switch in [stack.md](stack.md) if
 it triggers. GPU-less `--run-window` stays UNPROVEN live: this host has a
 GPU, so the zero-adapter typed path is unit-covered only.
 
+Step 8c GPU floor plus adapter diagnostics (issue #44): `--run-window` needs
+a working wgpu backend (Vulkan-capable GPU floor); headless stays the default
+and the no-flag binary never opens a window. Adapter selection enumerates
+backends in `vulkan>dx12>metal>gl` order (Metal between Dx12 and GL on Apple
+hosts, preserving the Vulkan to Dx12 to GL order) and scores device types
+`discrete>integrated>other>virtual>cpu` per the reference scoring; the
+`dx12+vulkan+metal+gl(ANGLE)` all-backends set is unchanged and each attempt
+is labeled in `NoAdapter` detail. The chosen adapter logs backend, name,
+device type, and driver at boot via `tracing::info!` plus stdout. Known fault,
+measured 2026-09-27 on Windows with Intel UHD 620-class (driver 31.0.101.x,
+dx12 backend): probe, window, surface, and compatible-adapter creation
+succeed, then `Adapter::request_device` exits `STATUS_ACCESS_VIOLATION` below
+this module (no raw handles, `unwrap`, `expect`, or unchecked blocks on this
+path), so no typed error can be produced when the driver faults. Record host,
+driver, and backend and reopen D-003 per [stack.md](stack.md) if it triggers.
+Engine stays `winit`-free and `wgpu`-free; the conservative device descriptor
+plus one force-fallback retry from Step 8b is unchanged.
+
 ### 6.2 Phone portrait
 
 Phone uses the same panels with a different arrangement:

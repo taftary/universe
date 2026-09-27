@@ -127,6 +127,69 @@ pub const WAYLAND_DISPLAY_ENV_NAME: &str = "WAYLAND_DISPLAY";
 /// a DX12-only attempt.
 pub const ADAPTER_BACKENDS_LABEL: &str = "dx12+vulkan+metal+gl(ANGLE)";
 
+/// Adapter backend probe order, dimensionless label.
+///
+/// Source: Vulkan-capable GPU floor; attempts enumerate Vulkan first, then
+/// Dx12, then Metal on Apple hosts, then GL over ANGLE. The
+/// [`ADAPTER_BACKENDS_LABEL`] all-backends set is unchanged; this label
+/// records the scored attempt order only.
+pub const ADAPTER_BACKEND_ORDER_LABEL: &str = "vulkan>dx12>metal>gl";
+
+/// Device-type score for a discrete GPU, dimensionless.
+///
+/// Source: reference adapter scoring discrete above integrated above virtual
+/// above CPU (`game-ref` boot path); highest rank wins.
+const DEVICE_SCORE_DISCRETE_U8: u8 = 4;
+
+/// Device-type score for an integrated GPU, dimensionless.
+///
+/// Source: reference adapter scoring; ranks below discrete, above unknown.
+const DEVICE_SCORE_INTEGRATED_U8: u8 = 3;
+
+/// Device-type score for an unknown or other device, dimensionless.
+///
+/// Source: this module only; unknown hardware outranks virtual and CPU but
+/// never outranks known integrated or discrete GPUs.
+const DEVICE_SCORE_OTHER_U8: u8 = 2;
+
+/// Device-type score for a virtual GPU, dimensionless.
+///
+/// Source: reference adapter scoring; ranks below hardware, above CPU.
+const DEVICE_SCORE_VIRTUAL_U8: u8 = 1;
+
+/// Device-type score for CPU or software rendering, dimensionless.
+///
+/// Source: reference adapter scoring; lowest rank, chosen only when no
+/// hardware adapter is surface-compatible.
+const DEVICE_SCORE_CPU_U8: u8 = 0;
+
+/// Backend score for Vulkan, dimensionless.
+///
+/// Source: Vulkan-capable GPU floor; highest rank so Vulkan-capable hosts
+/// prefer Vulkan first.
+const BACKEND_SCORE_VULKAN_U8: u8 = 4;
+
+/// Backend score for Dx12, dimensionless.
+///
+/// Source: Vulkan-capable floor order; ranks below Vulkan, above Metal and GL.
+const BACKEND_SCORE_DX12_U8: u8 = 3;
+
+/// Backend score for Metal, dimensionless.
+///
+/// Source: Apple-host order; ranks below Dx12, above GL.
+const BACKEND_SCORE_METAL_U8: u8 = 2;
+
+/// Backend score for GL over ANGLE, dimensionless.
+///
+/// Source: secondary-tier fallback; ranks below the primary backends.
+const BACKEND_SCORE_GL_U8: u8 = 1;
+
+/// Backend score for any other backend, dimensionless.
+///
+/// Source: this module only; unknown backends rank lowest and never win
+/// over a known backend.
+const BACKEND_SCORE_OTHER_U8: u8 = 0;
+
 /// Device debug label, dimensionless.
 ///
 /// Source: this module only; tags the conservative device request so
@@ -335,19 +398,159 @@ fn no_adapter_detail(wgpu_detail: &str) -> String {
     )
 }
 
-/// Request a wgpu adapter across hardware then fallback attempts.
+/// Score a wgpu device type for adapter ranking.
 ///
-/// Tries high-performance hardware, then low-power hardware (integrated and
-/// phone-class GPUs), then the force-fallback software path, each under the
-/// given surface constraint. The instance enables [`ADAPTER_BACKENDS_LABEL`],
-/// so Windows hosts also reach the secondary GL path over ANGLE. Returns the
-/// first usable adapter; when every attempt reports `RequestAdapterError`,
-/// returns [`OsWindowError::NoAdapter`] joining each attempt with host plus
-/// headless guidance. Init-time only; the frame loop never calls this.
+/// Higher wins; discrete outranks integrated, unknown, virtual, then CPU.
+/// Reference scoring only; init-time helper for adapter selection.
+#[must_use]
+fn device_type_score_u8(device_type: wgpu::DeviceType) -> u8 {
+    match device_type {
+        wgpu::DeviceType::DiscreteGpu => DEVICE_SCORE_DISCRETE_U8,
+        wgpu::DeviceType::IntegratedGpu => DEVICE_SCORE_INTEGRATED_U8,
+        wgpu::DeviceType::Other => DEVICE_SCORE_OTHER_U8,
+        wgpu::DeviceType::VirtualGpu => DEVICE_SCORE_VIRTUAL_U8,
+        wgpu::DeviceType::Cpu => DEVICE_SCORE_CPU_U8,
+    }
+}
+
+/// Score a wgpu backend for adapter ranking.
+///
+/// Higher wins; Vulkan outranks Dx12, Metal, GL, then unknown.
+/// Vulkan-capable floor order; init-time helper for adapter selection.
+#[must_use]
+fn backend_score_u8(backend: wgpu::Backend) -> u8 {
+    match backend {
+        wgpu::Backend::Vulkan => BACKEND_SCORE_VULKAN_U8,
+        wgpu::Backend::Dx12 => BACKEND_SCORE_DX12_U8,
+        wgpu::Backend::Metal => BACKEND_SCORE_METAL_U8,
+        wgpu::Backend::Gl => BACKEND_SCORE_GL_U8,
+        wgpu::Backend::Noop | wgpu::Backend::BrowserWebGpu => BACKEND_SCORE_OTHER_U8,
+    }
+}
+
+/// List backend probes in scored attempt order.
+///
+/// Vulkan first, then Dx12, then Metal, then GL over ANGLE.
+/// The relative Vulkan to Dx12 to GL order holds on every host.
+#[must_use]
+fn ordered_backend_probes() -> [(wgpu::Backends, &'static str); 4] {
+    [
+        (wgpu::Backends::VULKAN, "vulkan"),
+        (wgpu::Backends::DX12, "dx12"),
+        (wgpu::Backends::METAL, "metal"),
+        (wgpu::Backends::GL, "gl"),
+    ]
+}
+
+/// Format adapter info for boot logging.
+///
+/// Names backend, adapter name, device type, driver, and driver detail.
+/// Pure formatter so headless tests cover it without a GPU.
+#[must_use]
+fn format_adapter_info(info: &wgpu::AdapterInfo) -> String {
+    format!(
+        "adapter backend={} name={} device_type={:?} driver={} driver_info={} vendor={} device={}",
+        info.backend,
+        info.name,
+        info.device_type,
+        info.driver,
+        info.driver_info,
+        info.vendor,
+        info.device
+    )
+}
+
+/// Log the chosen adapter at boot.
+///
+/// Emits the [`format_adapter_info`] summary through `tracing::info!` plus
+/// stdout so CI logs show it without a subscriber. Init-time only.
+fn log_adapter_info(adapter: &wgpu::Adapter) {
+    let summary = format_adapter_info(&adapter.get_info());
+    tracing::info!("os_window {summary}");
+    println!("os_window {summary}");
+}
+
+/// Report whether an adapter can present to the surface.
+///
+/// True with no surface constraint; otherwise true only when the surface
+/// offers a default configuration for the adapter. Init-time helper only.
+#[must_use]
+fn is_surface_compatible(
+    compatible_surface: Option<&wgpu::Surface<'_>>,
+    adapter: &wgpu::Adapter,
+) -> bool {
+    let Some(surface) = compatible_surface else {
+        return true;
+    };
+    surface
+        .get_default_config(
+            adapter,
+            MIN_SURFACE_EXTENT_PX_U32,
+            MIN_SURFACE_EXTENT_PX_U32,
+        )
+        .is_some()
+}
+
+/// Pick the best surface-compatible adapter from one backend list.
+///
+/// Scores each compatible adapter by backend then device type and clones
+/// the winner. Returns `None` when no entry is surface-compatible.
+#[must_use]
+fn best_adapter_in_list(
+    adapters: &[wgpu::Adapter],
+    compatible_surface: Option<&wgpu::Surface<'_>>,
+) -> Option<wgpu::Adapter> {
+    let mut best_rank_u8: Option<(u8, u8)> = None;
+    let mut best_adapter: Option<wgpu::Adapter> = None;
+    for adapter in adapters {
+        if !is_surface_compatible(compatible_surface, adapter) {
+            continue;
+        }
+        let info = adapter.get_info();
+        let rank_u8 = (
+            backend_score_u8(info.backend),
+            device_type_score_u8(info.device_type),
+        );
+        let wins_bool = match best_rank_u8 {
+            None => true,
+            Some(current_u8) => rank_u8 > current_u8,
+        };
+        if wins_bool {
+            best_rank_u8 = Some(rank_u8);
+            best_adapter = Some(adapter.clone());
+        }
+    }
+    best_adapter
+}
+
+/// Request a wgpu adapter across scored backends then fallback attempts.
+///
+/// Enumerates [`ordered_backend_probes`] (Vulkan, Dx12, Metal, GL) and picks
+/// the best surface-compatible adapter in each backend by device score
+/// (discrete, integrated, other, virtual, CPU). Returns the first backend
+/// with a pick and logs it with [`log_adapter_info`]. When enumeration
+/// yields no compatible adapter, falls back to the hardware then software
+/// request chain under the given surface constraint, logging that winner
+/// too. The instance enables [`ADAPTER_BACKENDS_LABEL`], so Windows hosts
+/// also reach the secondary GL path over ANGLE. When every attempt fails,
+/// returns [`OsWindowError::NoAdapter`] joining each labeled attempt with
+/// host plus headless guidance. Init-time only; the frame loop never calls this.
 fn request_adapter_with_fallbacks(
     instance: &wgpu::Instance,
     compatible_surface: Option<&wgpu::Surface<'_>>,
 ) -> Result<wgpu::Adapter, OsWindowError> {
+    let mut reports: Vec<String> = Vec::new();
+    for (backends, backend_label) in ordered_backend_probes() {
+        let adapters = block_on_init(instance.enumerate_adapters(backends));
+        if let Some(adapter) = best_adapter_in_list(&adapters, compatible_surface) {
+            log_adapter_info(&adapter);
+            return Ok(adapter);
+        }
+        reports.push(format!(
+            "{backend_label}: no compatible adapter (enumerated {}); order={ADAPTER_BACKEND_ORDER_LABEL}",
+            adapters.len()
+        ));
+    }
     let attempts: [(wgpu::PowerPreference, bool, &str); 3] = [
         (
             wgpu::PowerPreference::HighPerformance,
@@ -361,7 +564,6 @@ fn request_adapter_with_fallbacks(
             "fallback software",
         ),
     ];
-    let mut reports: Vec<String> = Vec::new();
     for (preference, fallback_bool, label) in attempts {
         let options = wgpu::RequestAdapterOptions {
             power_preference: preference,
@@ -370,7 +572,10 @@ fn request_adapter_with_fallbacks(
             apply_limit_buckets: false,
         };
         match block_on_init(instance.request_adapter(&options)) {
-            Ok(adapter) => return Ok(adapter),
+            Ok(adapter) => {
+                log_adapter_info(&adapter);
+                return Ok(adapter);
+            }
             Err(error) => reports.push(format!("{label}: {error}")),
         }
     }
@@ -443,9 +648,14 @@ fn request_device_with_fallback(
 /// Probe for any usable wgpu adapter before touching winit or a surface.
 ///
 /// Builds a short-lived headless instance over [`ADAPTER_BACKENDS_LABEL`]
-/// and runs the hardware-then-fallback chain with no surface constraint.
-/// Zero usable adapters return typed [`OsWindowError::NoAdapter`] before any
-/// window opens, so headless stays the default on GPU-less hosts.
+/// and runs the scored backend enumeration
+/// ([`ADAPTER_BACKEND_ORDER_LABEL`], Vulkan then Dx12 then Metal then GL,
+/// device score discrete then integrated then other then virtual then CPU)
+/// with no surface constraint, then the hardware-then-fallback request chain.
+/// The winner logs backend, name, device type, and driver via
+/// [`log_adapter_info`]. Zero usable adapters return typed
+/// [`OsWindowError::NoAdapter`] before any window opens, so headless stays
+/// the default on GPU-less hosts.
 ///
 /// Known upstream limitation (issue #44 Step 8, measured 2026-09-27 on a
 /// Windows host with Intel UHD 620, driver 31.0.101.2130, dx12 backend):
@@ -707,7 +917,7 @@ impl ActiveWindow {
     ///
     /// Runs on the main thread inside resume; blocks only here while the
     /// adapter plus device resolve. The frame loop never blocks. Adapter
-    /// resolution runs the hardware-then-fallback chain in
+    /// resolution runs the scored backend enumeration plus fallback chain in
     /// [`request_adapter_with_fallbacks`]; device resolution uses the
     /// conservative descriptor plus one force-fallback retry in
     /// [`request_device_with_fallback`]. The upstream-access-violation
@@ -1410,5 +1620,74 @@ mod tests {
         let rendered = error.to_string();
         assert!(rendered.contains("os window device"));
         assert!(rendered.contains("device-detail"));
+    }
+
+    #[test]
+    fn backend_order_label_names_scored_probes() {
+        assert_eq!(ADAPTER_BACKEND_ORDER_LABEL, "vulkan>dx12>metal>gl");
+        assert!(ADAPTER_BACKEND_ORDER_LABEL.contains("vulkan"));
+        assert!(ADAPTER_BACKEND_ORDER_LABEL.contains("dx12"));
+        assert!(ADAPTER_BACKEND_ORDER_LABEL.contains("gl"));
+    }
+
+    #[test]
+    fn device_scores_rank_discrete_above_cpu() {
+        assert!(
+            device_type_score_u8(wgpu::DeviceType::DiscreteGpu)
+                > device_type_score_u8(wgpu::DeviceType::IntegratedGpu)
+        );
+        assert!(
+            device_type_score_u8(wgpu::DeviceType::IntegratedGpu)
+                > device_type_score_u8(wgpu::DeviceType::Other)
+        );
+        assert!(
+            device_type_score_u8(wgpu::DeviceType::Other)
+                > device_type_score_u8(wgpu::DeviceType::VirtualGpu)
+        );
+        assert!(
+            device_type_score_u8(wgpu::DeviceType::VirtualGpu)
+                > device_type_score_u8(wgpu::DeviceType::Cpu)
+        );
+    }
+
+    #[test]
+    fn backend_scores_rank_vulkan_above_gl() {
+        assert!(backend_score_u8(wgpu::Backend::Vulkan) > backend_score_u8(wgpu::Backend::Dx12));
+        assert!(backend_score_u8(wgpu::Backend::Dx12) > backend_score_u8(wgpu::Backend::Metal));
+        assert!(backend_score_u8(wgpu::Backend::Metal) > backend_score_u8(wgpu::Backend::Gl));
+    }
+
+    #[test]
+    fn backend_probes_enumerate_vulkan_first() {
+        let probes = ordered_backend_probes();
+        assert_eq!(probes.len(), 4);
+        assert_eq!(probes[0].1, "vulkan");
+        assert_eq!(probes[1].1, "dx12");
+        assert_eq!(probes[2].1, "metal");
+        assert_eq!(probes[3].1, "gl");
+        assert_eq!(probes[0].0, wgpu::Backends::VULKAN);
+        assert_eq!(probes[1].0, wgpu::Backends::DX12);
+        assert_eq!(probes[2].0, wgpu::Backends::METAL);
+        assert_eq!(probes[3].0, wgpu::Backends::GL);
+    }
+
+    #[test]
+    fn adapter_info_summary_names_backend_and_driver() {
+        let mut info = wgpu::AdapterInfo::new(wgpu::DeviceType::DiscreteGpu, wgpu::Backend::Vulkan);
+        info.name = String::from("test-adapter");
+        info.driver = String::from("test-driver");
+        info.driver_info = String::from("driver-detail");
+        let summary = format_adapter_info(&info);
+        assert!(summary.contains("vulkan"));
+        assert!(summary.contains("test-adapter"));
+        assert!(summary.contains("DiscreteGpu"));
+        assert!(summary.contains("test-driver"));
+        assert!(summary.contains("driver-detail"));
+    }
+
+    #[test]
+    fn best_adapter_in_empty_list_is_none() {
+        let empty: Vec<wgpu::Adapter> = Vec::new();
+        assert!(best_adapter_in_list(&empty, None).is_none());
     }
 }
