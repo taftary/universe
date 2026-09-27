@@ -1,6 +1,6 @@
 # M1 Orbit to Surface
 
-GitHub milestone 2. Open. Delivered so far: #14, #20, #22, #23, #26, #32.
+GitHub milestone 2. Open. Delivered so far: #14, #20, #22, #23, #26, #32, #34 (upon merge).
 
 ## Goal
 
@@ -18,6 +18,7 @@ GitHub milestone 2. Open. Delivered so far: #14, #20, #22, #23, #26, #32.
 - #23 Orbits and warp (closed)
 - #26 Trajectory, surface, and handoffs (closed)
 - #32 SimSnapshot and golden test (closed)
+- #34 Shell Phase A: top bar, input router, inspect view, DevDark-Pro theme; exit per [debug.md](../tech/debug.md) section 9 Phase A (pending close on merge)
 
 ## Plan
 
