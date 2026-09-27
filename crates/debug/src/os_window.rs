@@ -119,6 +119,14 @@ pub const DISPLAY_ENV_NAME: &str = "DISPLAY";
 /// Source: Wayland convention; probed on every host in [`display_available`].
 pub const WAYLAND_DISPLAY_ENV_NAME: &str = "WAYLAND_DISPLAY";
 
+/// Wgpu backends probed for the OS window, dimensionless label.
+///
+/// Source: wgpu 30 `Backends::all` (primary DX12, Vulkan, Metal plus
+/// secondary GL over ANGLE on Windows); both adapter probes enable all of
+/// them so DX11-class Windows hosts fall back through GL instead of failing
+/// a DX12-only attempt.
+pub const ADAPTER_BACKENDS_LABEL: &str = "dx12+vulkan+metal+gl(ANGLE)";
+
 /// Reason for staying headless without opening a window.
 ///
 /// Returned by [`decide_launch`] so CI logs stay explicit.
@@ -184,8 +192,8 @@ pub enum OsWindowError {
     Window(String),
     /// Wgpu surface creation failed with rendered detail.
     Surface(String),
-    /// No compatible wgpu adapter was found.
-    NoAdapter,
+    /// No compatible wgpu adapter was found, with host plus backend detail.
+    NoAdapter(String),
     /// The adapter offered no surface format.
     NoSurfaceFormat,
     /// Wgpu device request failed with rendered detail.
@@ -208,7 +216,12 @@ impl core::fmt::Display for OsWindowError {
             Self::EventLoop(detail) => write!(formatter, "os window event loop: {detail}"),
             Self::Window(detail) => write!(formatter, "os window creation: {detail}"),
             Self::Surface(detail) => write!(formatter, "os window surface: {detail}"),
-            Self::NoAdapter => write!(formatter, "os window: no compatible wgpu adapter"),
+            Self::NoAdapter(detail) => {
+                write!(
+                    formatter,
+                    "os window: no compatible wgpu adapter ({detail})"
+                )
+            }
             Self::NoSurfaceFormat => {
                 write!(formatter, "os window: adapter offered no surface format")
             }
@@ -230,7 +243,7 @@ impl std::error::Error for OsWindowError {
             Self::EventLoop(_)
             | Self::Window(_)
             | Self::Surface(_)
-            | Self::NoAdapter
+            | Self::NoAdapter(_)
             | Self::NoSurfaceFormat
             | Self::Device(_)
             | Self::SimInit(_)
@@ -304,6 +317,90 @@ pub fn display_available_with(display_value: Option<&str>, wayland_value: Option
         || wayland_value.is_some_and(|value| !value.is_empty())
 }
 
+/// Build the `NoAdapter` detail from a wgpu report.
+///
+/// Names the probed backends plus the host OS and points at the headless
+/// demo so GPU-less logs stay actionable without opening a window.
+#[must_use]
+fn no_adapter_detail(wgpu_detail: &str) -> String {
+    format!(
+        "{wgpu_detail}; backends={ADAPTER_BACKENDS_LABEL}; host={}; {RUN_WINDOW_FLAG} needs a working GPU; run without the flag for the headless demo",
+        std::env::consts::OS
+    )
+}
+
+/// Request a wgpu adapter across hardware then fallback attempts.
+///
+/// Tries high-performance hardware, then low-power hardware (integrated and
+/// phone-class GPUs), then the force-fallback software path, each under the
+/// given surface constraint. The instance enables [`ADAPTER_BACKENDS_LABEL`],
+/// so Windows hosts also reach the secondary GL path over ANGLE. Returns the
+/// first usable adapter; when every attempt reports `RequestAdapterError`,
+/// returns [`OsWindowError::NoAdapter`] joining each attempt with host plus
+/// headless guidance. Init-time only; the frame loop never calls this.
+fn request_adapter_with_fallbacks(
+    instance: &wgpu::Instance,
+    compatible_surface: Option<&wgpu::Surface<'_>>,
+) -> Result<wgpu::Adapter, OsWindowError> {
+    let attempts: [(wgpu::PowerPreference, bool, &str); 3] = [
+        (
+            wgpu::PowerPreference::HighPerformance,
+            false,
+            "high-performance hardware",
+        ),
+        (wgpu::PowerPreference::LowPower, false, "low-power hardware"),
+        (
+            wgpu::PowerPreference::HighPerformance,
+            true,
+            "fallback software",
+        ),
+    ];
+    let mut reports: Vec<String> = Vec::new();
+    for (preference, fallback_bool, label) in attempts {
+        let options = wgpu::RequestAdapterOptions {
+            power_preference: preference,
+            force_fallback_adapter: fallback_bool,
+            compatible_surface,
+            apply_limit_buckets: false,
+        };
+        match block_on_init(instance.request_adapter(&options)) {
+            Ok(adapter) => return Ok(adapter),
+            Err(error) => reports.push(format!("{label}: {error}")),
+        }
+    }
+    Err(OsWindowError::NoAdapter(no_adapter_detail(
+        &reports.join("; "),
+    )))
+}
+
+/// Probe for any usable wgpu adapter before touching winit or a surface.
+///
+/// Builds a short-lived headless instance over [`ADAPTER_BACKENDS_LABEL`]
+/// and runs the hardware-then-fallback chain with no surface constraint.
+/// Zero usable adapters return typed [`OsWindowError::NoAdapter`] before any
+/// window opens, so headless stays the default on GPU-less hosts.
+///
+/// Known upstream limitation (issue #44 Step 8, measured 2026-09-27 on a
+/// Windows host with Intel UHD 620, driver 31.0.101.2130, dx12 backend):
+/// the headless probe below (instance plus surface-less request, including
+/// the force-fallback attempt) succeeds and enumerates a dx12 adapter, and
+/// the window-bound path reaches window, surface, and compatible-adapter
+/// creation; the process then exits with `STATUS_ACCESS_VIOLATION` inside
+/// `Adapter::request_device` before wgpu reports any `Err`. That fault lies
+/// below this module: our code holds no raw handles on this path and
+/// performs no unchecked blocks, `unwrap`, or `expect`, mapping every
+/// reported `Err` to typed `NoAdapter` or `Device`. When the fault triggers,
+/// no typed error can be produced because the process dies inside the driver
+/// call. Mitigation is the D-003 kill-switch in `docs/tech/stack.md`:
+/// record host, driver, and backend, then reopen D-003 (`ash` fallback) per
+/// that file. This probe keeps the graceful typed path for every failure
+/// wgpu does report, and fails fast before any window opens on hosts with
+/// zero usable adapters.
+fn preflight_adapter_probe() -> Result<(), OsWindowError> {
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    request_adapter_with_fallbacks(&instance, None).map(|_adapter| ())
+}
+
 /// Run the ticker-only OS window until close.
 ///
 /// Creates the winit event loop, wgpu surface, and egui-wgpu renderer on the
@@ -313,8 +410,11 @@ pub fn display_available_with(display_value: Option<&str>, wayland_value: Option
 /// # Errors
 ///
 /// Returns [`OsWindowError`] for event-loop, window, surface, adapter,
-/// device, sim, snapshot, shell, or budget failures.
+/// device, sim, snapshot, shell, or budget failures. GPU-less hosts fail
+/// fast with typed [`OsWindowError::NoAdapter`] from the pre-flight probe
+/// before any window opens; see [`preflight_adapter_probe`].
 pub fn run_window() -> Result<(), OsWindowError> {
+    preflight_adapter_probe()?;
     let event_loop =
         EventLoop::new().map_err(|error| OsWindowError::EventLoop(error.to_string()))?;
     let mut app = WindowApp::default();
@@ -539,7 +639,11 @@ impl ActiveWindow {
     /// Create the window, surface, device, renderer, shell, and sim.
     ///
     /// Runs on the main thread inside resume; blocks only here while the
-    /// adapter plus device resolve. The frame loop never blocks.
+    /// adapter plus device resolve. The frame loop never blocks. Adapter
+    /// resolution runs the hardware-then-fallback chain in
+    /// [`request_adapter_with_fallbacks`]; the upstream-access-violation
+    /// caveat on GPU-less Windows hosts is documented on
+    /// [`preflight_adapter_probe`].
     ///
     /// # Errors
     ///
@@ -563,13 +667,7 @@ impl ActiveWindow {
         let surface = instance
             .create_surface(Arc::clone(&window))
             .map_err(|error| OsWindowError::Surface(error.to_string()))?;
-        let adapter = block_on_init(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            force_fallback_adapter: false,
-            compatible_surface: Some(&surface),
-            apply_limit_buckets: false,
-        }))
-        .map_err(|_error| OsWindowError::NoAdapter)?;
+        let adapter = request_adapter_with_fallbacks(&instance, Some(&surface))?;
         let capabilities = surface.get_capabilities(&adapter);
         let Some(format) = capabilities
             .formats
@@ -1197,5 +1295,30 @@ mod tests {
                 .contains(RUN_WINDOW_FLAG)
         );
         assert!(!HeadlessReason::DisplayMissing.to_string().is_empty());
+    }
+
+    #[test]
+    fn adapter_backends_label_covers_fallback() {
+        assert!(ADAPTER_BACKENDS_LABEL.contains("dx12"));
+        assert!(ADAPTER_BACKENDS_LABEL.contains("gl"));
+        assert!(!ADAPTER_BACKENDS_LABEL.is_empty());
+    }
+
+    #[test]
+    fn no_adapter_detail_names_backends_host_and_headless_path() {
+        let detail = no_adapter_detail("wgpu-probe-report");
+        assert!(detail.contains("wgpu-probe-report"));
+        assert!(detail.contains(ADAPTER_BACKENDS_LABEL));
+        assert!(detail.contains(std::env::consts::OS));
+        assert!(detail.contains(RUN_WINDOW_FLAG));
+        assert!(detail.contains("headless"));
+    }
+
+    #[test]
+    fn no_adapter_error_renders_detail() {
+        let error = OsWindowError::NoAdapter(String::from("probe-detail"));
+        let rendered = error.to_string();
+        assert!(rendered.contains("no compatible wgpu adapter"));
+        assert!(rendered.contains("probe-detail"));
     }
 }

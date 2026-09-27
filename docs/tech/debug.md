@@ -171,6 +171,23 @@ GPU-less Windows host). Validate live with
 `cargo run -p universe-debug --features dev-shell -- --run-window` on a
 display host and close the window to exit.
 
+Step 8 GPU-less note (issue #44): `--run-window` pre-flights the wgpu adapter
+(hardware high-performance, then low-power, then force-fallback software over
+`dx12+vulkan+metal+gl(ANGLE)`) before winit opens a window; zero usable
+adapters return typed `OsWindowError::NoAdapter` with host plus backend detail
+and the headless guidance, so headless stays default and our code never
+crashes (no unchecked blocks, `unwrap`, or `expect` on the probe path).
+Known upstream limitation, measured 2026-09-27 on a Windows host with Intel
+UHD 620 (driver 31.0.101.2130, dx12 backend): the headless pre-flight
+succeeds and the window-bound path reaches window, surface, and
+compatible-adapter creation, then exits `STATUS_ACCESS_VIOLATION` inside
+`Adapter::request_device` before wgpu reports any `Err`. That fault is below
+`crates/debug/src/os_window.rs` and cannot be caught from safe Rust; the
+typed `Device` error covers only failures wgpu reports. Record host, driver,
+and backend and reopen D-003 per the kill-switch in [stack.md](stack.md) if
+it triggers. GPU-less `--run-window` stays UNPROVEN live: this host has a
+GPU, so the zero-adapter typed path is unit-covered only.
+
 ### 6.2 Phone portrait
 
 Phone uses the same panels with a different arrangement:
