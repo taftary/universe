@@ -259,6 +259,47 @@ impl TraceLog {
         Ok(())
     }
 
+    /// Render 25 lines before plus 25 after a tick for bundle export.
+    ///
+    /// Allocates once per export; never called in the frame loop.
+    /// Shell state stays in memory only; the caller writes the file.
+    #[must_use]
+    pub fn excerpt_around(&self, center_tick_u64: u64) -> Vec<String> {
+        let (head, tail) = self.entries.split_at(self.next_index_usize);
+        let mut ordered: Vec<&LogEntry> = Vec::with_capacity(self.entries.len());
+        ordered.extend(tail.iter());
+        ordered.extend(head.iter());
+        let mut before: Vec<String> = Vec::new();
+        let mut after: Vec<String> = Vec::new();
+        for entry in ordered {
+            let line = format!(
+                "tick={tick} {level} {module}: {message}",
+                tick = entry.tick_count_u64(),
+                level = entry.level().label(),
+                module = entry.module_str(),
+                message = entry.message_str()
+            );
+            match entry.tick_count_u64().cmp(&center_tick_u64) {
+                core::cmp::Ordering::Less => {
+                    if before.len() >= 25 {
+                        before.remove(0);
+                    }
+                    before.push(line);
+                }
+                core::cmp::Ordering::Greater => {
+                    if after.len() < 25 {
+                        after.push(line);
+                    }
+                }
+                core::cmp::Ordering::Equal => {
+                    before.push(line);
+                }
+            }
+        }
+        before.extend(after);
+        before
+    }
+
     /// Report whether an entry passes the current filters.
     #[must_use]
     pub fn passes_filter(&self, entry: &LogEntry) -> bool {
