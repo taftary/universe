@@ -1336,18 +1336,22 @@ impl ActiveWindow {
 
     /// Present one shell output frame through the wgpu surface.
     ///
-    /// Uploads texture deltas, tessellates, acquires the next surface
-    /// texture, renders the shell pass, and presents. Surface loss
-    /// reconfigures and skips; occlusion plus timeout skips silently.
-    fn present_frame(&mut self, output: egui::FullOutput, size: PhysicalSize<u32>, scale_f64: f64) {
+    /// Uploads texture deltas before painting, tessellates, acquires the next
+    /// surface texture, renders the shell pass, presents, then frees retired
+    /// textures and clears the delta so the debug-only `TexturesDelta` drop
+    /// guard never fires. Surface loss reconfigures and skips; occlusion plus
+    /// timeout skips silently; both skip paths still free and clear.
+    fn present_frame(
+        &mut self,
+        mut output: egui::FullOutput,
+        size: PhysicalSize<u32>,
+        scale_f64: f64,
+    ) {
         for (texture_id, image_deltas) in &output.textures_delta.set {
             for image_delta in image_deltas {
                 self.renderer
                     .update_texture(&self.device, &self.queue, *texture_id, image_delta);
             }
-        }
-        for texture_id in &output.textures_delta.free {
-            self.renderer.free_texture(texture_id);
         }
         let pixels_per_point_f32 = pixels_per_point_f32(scale_f64);
         let paint_jobs = self.egui.tessellate(output.shapes, output.pixels_per_point);
@@ -1355,58 +1359,64 @@ impl ActiveWindow {
             size_in_pixels: [size.width, size.height],
             pixels_per_point: pixels_per_point_f32,
         };
-        let frame = match self.surface.get_current_texture() {
+        let frame_option = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
+            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => Some(frame),
             wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
                 self.on_resized(size.width, size.height);
-                return;
+                None
             }
             wgpu::CurrentSurfaceTexture::Timeout
             | wgpu::CurrentSurfaceTexture::Occluded
-            | wgpu::CurrentSurfaceTexture::Validation => return,
+            | wgpu::CurrentSurfaceTexture::Validation => None,
         };
-        let view = frame
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("os-window-egui-encoder"),
-            });
-        let user_buffers = self.renderer.update_buffers(
-            &self.device,
-            &self.queue,
-            &mut encoder,
-            &paint_jobs,
-            &screen_descriptor,
-        );
-        {
-            let pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("os-window-egui-pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(clear_color_f64()),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            self.renderer
-                .render(&mut pass.forget_lifetime(), &paint_jobs, &screen_descriptor);
+        if let Some(frame) = frame_option {
+            let view = frame
+                .texture
+                .create_view(&wgpu::TextureViewDescriptor::default());
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("os-window-egui-encoder"),
+                });
+            let user_buffers = self.renderer.update_buffers(
+                &self.device,
+                &self.queue,
+                &mut encoder,
+                &paint_jobs,
+                &screen_descriptor,
+            );
+            {
+                let pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("os-window-egui-pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(clear_color_f64()),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+                self.renderer
+                    .render(&mut pass.forget_lifetime(), &paint_jobs, &screen_descriptor);
+            }
+            self.queue.submit(
+                user_buffers
+                    .into_iter()
+                    .chain(std::iter::once(encoder.finish())),
+            );
+            self.queue.present(frame);
         }
-        self.queue.submit(
-            user_buffers
-                .into_iter()
-                .chain(std::iter::once(encoder.finish())),
-        );
-        self.queue.present(frame);
+        for texture_id in &output.textures_delta.free {
+            self.renderer.free_texture(texture_id);
+        }
+        output.textures_delta.clear();
     }
 }
 
@@ -1775,5 +1785,29 @@ mod tests {
             decide_launch_with(&both, false),
             LaunchDecision::StayHeadless(HeadlessReason::DisplayMissing)
         );
+    }
+
+    #[test]
+    fn live_frame_delta_apply_then_clear_leaves_no_unapplied() {
+        let mut delta = egui::epaint::textures::TexturesDelta::default();
+        assert!(delta.is_empty());
+        let image = egui::epaint::ColorImage::filled([1, 1], egui::epaint::Color32::WHITE);
+        let image_data = egui::epaint::ImageData::Color(std::sync::Arc::new(image));
+        delta.push(
+            egui::epaint::TextureId::Managed(0),
+            egui::epaint::ImageDelta::full(
+                image_data,
+                egui::epaint::textures::TextureOptions::default(),
+            ),
+        );
+        delta.free(egui::epaint::TextureId::Managed(1));
+        let mut applied_usize = 0_usize;
+        for image_deltas in delta.set.values() {
+            applied_usize += image_deltas.len();
+        }
+        assert_eq!(applied_usize, 1);
+        assert_eq!(delta.free.len(), 1);
+        delta.clear();
+        assert!(delta.is_empty());
     }
 }
