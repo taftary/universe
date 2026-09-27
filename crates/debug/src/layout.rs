@@ -411,6 +411,145 @@ impl PresetSelection {
     }
 }
 
+/// Desktop window default width in points.
+///
+/// Scaffold default only; the window is user-resizable and content never
+/// forks with size. Source: `docs/tech/debug.md` section 6.1.
+pub const DESKTOP_WINDOW_WIDTH_PT_F32: f32 = 1280.0;
+
+/// Desktop window default height in points.
+///
+/// Scaffold default only; the window is user-resizable and content never
+/// forks with size. Source: `docs/tech/debug.md` section 6.1.
+pub const DESKTOP_WINDOW_HEIGHT_PT_F32: f32 = 800.0;
+
+/// Desktop window title text.
+///
+/// Names the dev-only shell binary. Source: `crates/debug/Cargo.toml` binary name.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+    )
+)]
+pub const DESKTOP_WINDOW_TITLE: &str = "universe-debug";
+
+/// Desktop flight-window configuration as plain data.
+///
+/// Holds the scaffold size plus the visibility preset for the same-build
+/// scaled-up desktop shell. Content never forks between presets or devices;
+/// presets only switch visibility and size per `docs/tech/debug.md` 6.1.
+/// The OS window (winit event loop plus wgpu surface) lands in a later step;
+/// this config drives the headless-proven assembly meanwhile with no new
+/// dependencies and no lockfile change.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DesktopWindowConfig {
+    /// Window width in points.
+    width_pt_f32: f32,
+    /// Window height in points.
+    height_pt_f32: f32,
+    /// Visibility preset; shell state only and never persists.
+    preset: DesktopPreset,
+}
+
+impl DesktopWindowConfig {
+    /// Build the ticker-only default window configuration.
+    ///
+    /// Opens blind with the top bar alone for minimal occlusion; the tester
+    /// switches to Descent for handoff watching.
+    #[must_use]
+    pub const fn ticker_only() -> Self {
+        Self {
+            width_pt_f32: DESKTOP_WINDOW_WIDTH_PT_F32,
+            height_pt_f32: DESKTOP_WINDOW_HEIGHT_PT_F32,
+            preset: DesktopPreset::TickerOnly,
+        }
+    }
+
+    /// Build a window configuration from explicit values.
+    ///
+    /// Sizes are in points and must be finite and strictly positive.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LayoutError`] when a size is non-finite or not positive.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+        )
+    )]
+    pub fn new(
+        width_pt_f32: f32,
+        height_pt_f32: f32,
+        preset: DesktopPreset,
+    ) -> Result<Self, LayoutError> {
+        for size_pt_f32 in [width_pt_f32, height_pt_f32] {
+            if !size_pt_f32.is_finite() {
+                return Err(LayoutError::NonFinite {
+                    value_f64: f64::from(size_pt_f32),
+                });
+            }
+            if size_pt_f32 <= 0.0 {
+                return Err(LayoutError::NonPositive {
+                    value_f64: f64::from(size_pt_f32),
+                });
+            }
+        }
+        Ok(Self {
+            width_pt_f32,
+            height_pt_f32,
+            preset,
+        })
+    }
+
+    /// Return the window width in points.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+        )
+    )]
+    #[must_use]
+    pub const fn width_pt_f32(self) -> f32 {
+        self.width_pt_f32
+    }
+
+    /// Return the window height in points.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+        )
+    )]
+    #[must_use]
+    pub const fn height_pt_f32(self) -> f32 {
+        self.height_pt_f32
+    }
+
+    /// Return the visibility preset.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
+        )
+    )]
+    #[must_use]
+    pub const fn preset(self) -> DesktopPreset {
+        self.preset
+    }
+
+    /// Select another preset without touching content.
+    pub const fn set_preset(&mut self, preset: DesktopPreset) {
+        self.preset = preset;
+    }
+}
+
 /// Phone bottom-sheet tab with one visible at a time.
 ///
 /// Same panels as desktop in a different arrangement.
@@ -1620,5 +1759,45 @@ mod tests {
     fn shell_closed_keeps_run_control_legible() {
         assert!(shell_closed_preserves_run_control_bool());
         assert_eq!(DevTag::anchor(), "top-right");
+    }
+
+    #[test]
+    fn desktop_window_config_defaults_to_ticker_only() {
+        let config = DesktopWindowConfig::ticker_only();
+        assert!((config.width_pt_f32() - DESKTOP_WINDOW_WIDTH_PT_F32).abs() < PX_TOL_F32);
+        assert!((config.height_pt_f32() - DESKTOP_WINDOW_HEIGHT_PT_F32).abs() < PX_TOL_F32);
+        assert!(config.width_pt_f32() > 0.0);
+        assert!(config.height_pt_f32() > 0.0);
+        assert_eq!(config.preset(), DesktopPreset::TickerOnly);
+        assert_eq!(DESKTOP_WINDOW_TITLE, "universe-debug");
+    }
+
+    #[test]
+    fn desktop_window_config_checks_sizes_and_switches_preset() {
+        assert!(matches!(
+            DesktopWindowConfig::new(
+                f32::NAN,
+                DESKTOP_WINDOW_HEIGHT_PT_F32,
+                DesktopPreset::TickerOnly
+            ),
+            Err(LayoutError::NonFinite { .. })
+        ));
+        assert!(matches!(
+            DesktopWindowConfig::new(0.0, DESKTOP_WINDOW_HEIGHT_PT_F32, DesktopPreset::TickerOnly),
+            Err(LayoutError::NonPositive { .. })
+        ));
+        assert!(matches!(
+            DesktopWindowConfig::new(DESKTOP_WINDOW_WIDTH_PT_F32, -1.0, DesktopPreset::TickerOnly),
+            Err(LayoutError::NonPositive { .. })
+        ));
+        let Ok(mut config) = DesktopWindowConfig::new(
+            DESKTOP_WINDOW_WIDTH_PT_F32,
+            DESKTOP_WINDOW_HEIGHT_PT_F32,
+            DesktopPreset::TickerOnly,
+        ) else {
+            panic!("window config must build")
+        };
+        config.set_preset(DesktopPreset::Descent);
+        assert_eq!(config.preset(), DesktopPreset::Descent);
     }
 }
