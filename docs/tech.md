@@ -48,6 +48,10 @@ D-009 locks in #34 Phase A as the egui 0.36.2 plus paired egui-wgpu render bridg
 
 Step 6 wires the winit 0.30.13 event loop plus wgpu 30.0.1 surface plus egui-wgpu 0.36.2 renderer in `crates/debug/src/os_window.rs` behind `dev-shell`, driving `DesktopWindow` ticker-only on the main thread with a fixed-step demo orbit. Headless CI never opens: explicit `--run-window` flag plus display gate. The direct `wgpu` edge stays on the locked 30.0 line with no new lock entries; engine sim stays winit-free and wgpu-free.
 
+### D-003 outcome note (#50)
+
+Measured 2026-09-28 on Intel UHD Graphics 620 with driver frozen at 31.0.101.2130 and wgpu 30.0.1. `universe-debug` adds a `--backend auto|vulkan|dx12|gl` diagnostics flag with auto default unchanged. Backend matrix: `auto` and `vulkan` exit `STATUS_ACCESS_VIOLATION` in `igvk64.dll` at offset `0x64ea72`; `dx12`, `gl`, and software stay live. `Auto` only quarantines the Vulkan adapter on backend plus vendor `0x8086` plus `UHD Graphics 620` model match; explicit `--backend vulkan` stays unfiltered. The driver-version check was dropped because the version is unobservable in Vulkan `AdapterInfo` pre-crash (Step 5 evidence); cause stays unconfirmed. Live proof: `auto` selects `dx12` 2/2 and `dx12` holds 3/3 with zero attributed faults. D-003 kill-switch evaluated NOT triggered: three backends alive, no sustained-fps measurement exists, phone run deferred per #48. No new dependencies, no stack change, engine untouched.
+
 ### D-010/D-011 Phase B note (#36 Step 1)
 
 Phase B draws continuity plots with egui Painter only, with no `egui_plot` lock. The bottom panel stays hand-placed tabs, with no `postcard` lock and no `egui_dock` lock. `Cargo.lock` is unchanged. Revisit D-010 or D-011 only with measured draw-cost evidence.

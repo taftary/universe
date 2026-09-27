@@ -37,6 +37,9 @@ const DEBUG_SRC: &str = include_str!("../docs/tech/debug.md");
 /// Window flag spelling, dimensionless text.
 const RUN_WINDOW_FLAG: &str = "--run-window";
 
+/// Backend flag spelling, dimensionless text.
+const BACKEND_FLAG: &str = "--backend";
+
 /// Panic when `haystack` lacks `needle`.
 fn assert_contains(haystack: &str, needle: &str, context: &str) {
     assert!(haystack.contains(needle), "missing {needle} in {context}");
@@ -152,4 +155,59 @@ fn docs_headless_proven_contract() {
     assert_contains(DEBUG_SRC, "tests/os_window_ticker.rs", "debug.md");
     assert_contains(DEBUG_SRC, "FRAME_BUDGET_MS", "debug.md");
     assert_contains(DEBUG_SRC, "quality.md", "debug.md");
+}
+
+/// Backend override exists: flag plus selection plus restricted probes.
+///
+/// `--backend auto|vulkan|dx12|gl` threads through the preflight probe and the
+/// window-bound pick so both agree; `auto` keeps the scored Vulkan-first order
+/// and named values restrict enumeration plus fallback to one backend with a
+/// typed error for unknown values and a boot log of the effective backend.
+#[test]
+fn backend_override_source_contract() {
+    assert_contains(OS_WINDOW_SRC, "BACKEND_FLAG", "os_window.rs");
+    assert_contains(OS_WINDOW_SRC, BACKEND_FLAG, "os_window.rs");
+    assert_contains(OS_WINDOW_SRC, "\"--backend\"", "os_window.rs");
+    assert_contains(OS_WINDOW_SRC, "BackendSelection", "os_window.rs");
+    assert_contains(OS_WINDOW_SRC, "parse_backend_selection", "os_window.rs");
+    assert_contains(OS_WINDOW_SRC, "BACKEND_AUTO_LABEL", "os_window.rs");
+    assert_contains(OS_WINDOW_SRC, "BACKEND_VULKAN_LABEL", "os_window.rs");
+    assert_contains(OS_WINDOW_SRC, "BACKEND_DX12_LABEL", "os_window.rs");
+    assert_contains(OS_WINDOW_SRC, "BACKEND_GL_LABEL", "os_window.rs");
+    assert_contains(OS_WINDOW_SRC, "\"auto\"", "os_window.rs");
+    assert_contains(OS_WINDOW_SRC, "\"vulkan\"", "os_window.rs");
+    assert_contains(OS_WINDOW_SRC, "\"dx12\"", "os_window.rs");
+    assert_contains(OS_WINDOW_SRC, "\"gl\"", "os_window.rs");
+    assert_contains(OS_WINDOW_SRC, "order_label", "os_window.rs");
+    assert_contains(OS_WINDOW_SRC, "backends_label", "os_window.rs");
+    assert_contains(OS_WINDOW_SRC, "instance_backends", "os_window.rs");
+    assert_contains(OS_WINDOW_SRC, "create_instance", "os_window.rs");
+    assert_contains(OS_WINDOW_SRC, "log_backend_selection", "os_window.rs");
+    assert_contains(OS_WINDOW_SRC, "os_window backend=", "os_window.rs");
+    assert_contains(OS_WINDOW_SRC, "Backend(", "os_window.rs");
+    assert_contains(OS_WINDOW_SRC, "preflight_adapter_probe", "os_window.rs");
+    assert_contains(OS_WINDOW_SRC, "ActiveWindow::create", "os_window.rs");
+    assert_contains(DEBUG_MAIN_SRC, "parse_backend_selection", "debug main.rs");
+    assert_contains(DEBUG_MAIN_SRC, "backend_selection", "debug main.rs");
+    assert_contains(DEBUG_MAIN_SRC, BACKEND_FLAG, "debug main.rs");
+}
+
+/// Backend flag never weakens the headless gate.
+///
+/// The window still opens only with `RUN_WINDOW_FLAG` plus a display;
+/// `--backend` alone stays headless and `cargo test` carries neither flag.
+#[test]
+fn backend_headless_gate_unchanged() {
+    assert_contains(OS_WINDOW_SRC, "decide_launch", "os_window.rs");
+    assert_contains(OS_WINDOW_SRC, "display_available", "os_window.rs");
+    assert_contains(OS_WINDOW_SRC, "FlagMissing", "os_window.rs");
+    assert_contains(OS_WINDOW_SRC, "DisplayMissing", "os_window.rs");
+    assert_contains(DEBUG_MAIN_SRC, "decide_launch", "debug main.rs");
+    for arg in std::env::args() {
+        assert!(
+            arg != BACKEND_FLAG && !arg.starts_with("--backend="),
+            "cargo test must not carry {BACKEND_FLAG}; got {arg}"
+        );
+    }
+    assert_contains(OS_WINDOW_SRC, "\"--backend\"", "os_window.rs");
 }

@@ -227,6 +227,50 @@ first-frame and unfocused-window suspect; the `1.582 ms` shell cost is
 the observed cost evidence. Sustained frame cost stays to be measured on
 a GPU host.
 
+Step 2 matrix (issue #50, measured 2026-09-28 on Intel UHD Graphics 620
+driver 31.0.101.2130, debug profile built via
+`cargo build -p universe-debug --features dev-shell`): display present,
+so the matrix ran (not blocked). Each run launched
+`.\target\debug\universe-debug.exe` with a 25 s verdict window; crashed
+runs show process exit code plus elapsed, live runs were killed at the
+window and show alive=yes. Stdout held 4 lines per run (pre-flight
+probe pair plus window-bound pair, identical text); stderr was empty on
+all 5 runs; no device lines appeared on any run.
+
+| Run | Flags | Exit / elapsed | Alive 25 s | Adapter stdout lines | Fault (App log ID 1000) |
+| --- | --- | --- | --- | --- | --- |
+| auto | `--run-window` | -1073741819 (0xC0000005) / 3847 ms | no | `backend=auto`, `adapter backend=vulkan name=Intel(R) UHD Graphics 620 device_type=IntegratedGpu driver=Intel Corporation` | igvk64.dll 31.0.101.2130, 0xc0000005, offset 0x64ea72 (pid 20568) |
+| vulkan | `--run-window --backend vulkan` | -1073741819 (0xC0000005) / 3216 ms | no | same vulkan Intel UHD 620 lines as auto | igvk64.dll 31.0.101.2130, 0xc0000005, offset 0x64ea72 |
+| dx12 | `--run-window --backend dx12` | n/a, killed / 25016 ms | yes | `backend=dx12`, `adapter backend=dx12 name=Intel(R) UHD Graphics 620 device_type=IntegratedGpu driver=31.0.101.2130` | - |
+| gl | `--run-window --backend gl` | n/a, killed / 25128 ms | yes | `backend=gl`, `adapter backend=gl name=Intel(R) UHD Graphics 620 device_type=IntegratedGpu driver_info=4.6.0 - Build 31.0.101.2130` | - |
+| software | `--run-window --software` | n/a, killed / 25435 ms | yes | `backend=auto`, `adapter backend=dx12 name=Microsoft Basic Render Driver device_type=Cpu driver=10.0.26100.9549` | - |
+
+Gate input: live backends are dx12, gl, and software; dying backends
+are auto (which picked vulkan on this host) and vulkan. Extra record:
+a fourth ID 1000 event for the debug exe exists at 01:08:11 with the
+same module, version, and code but offset 0x630e61; it falls in the
+window of the first dx12 attempt whose pid was not recorded, so it is
+listed unattributed. No ID 1000 events exist for the later dx12, gl, or
+software runs, which were all killed while alive.
+
+Step 4a quarantine (issue #50): `Auto` enumeration skips an adapter only
+when backend is Vulkan plus vendor is `0x8086` plus name contains
+`UHD Graphics 620` plus `31.0.101.2130` is in `driver` or `driver_info`;
+explicit `--backend vulkan` still probes unfiltered. Each skip logs the
+full name, vendor, driver plus driver detail, the `igvk64.dll` reason, and
+the `vulkan>dx12>metal>gl` fallback order. Expected effect on this host:
+the quarantined Vulkan pick drops out and scoring picks dx12 next; cause
+stays unconfirmed.
+
+Step 5b predicate fix (issue #50): Step 5 proved the Step 4a version
+conjunct unobservable on the crashing path (Vulkan `AdapterInfo` carries
+`driver=Intel Corporation` plus `driver_info=Intel driver`, version in
+neither), so the quirk now keys on backend plus vendor plus model only
+(Vulkan, `0x8086`, `UHD Graphics 620`); the `igvk64.dll` version text
+stays reason-text only in the skip line. Auto-only scoping, ranking-level
+wiring, `vulkan>dx12>metal>gl` order, unfiltered explicit `--backend
+vulkan`, and skip-line fields are unchanged; cause stays unconfirmed.
+
 ### 6.2 Phone portrait
 
 Phone uses the same panels with a different arrangement:

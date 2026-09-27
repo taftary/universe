@@ -43,6 +43,41 @@ pub const RUN_WINDOW_FLAG: &str = "--run-window";
 /// Takes effect only alongside [`RUN_WINDOW_FLAG`]; see [`software_requested`].
 pub const SOFTWARE_FLAG: &str = "--software";
 
+/// Command-line flag selecting the wgpu backend override.
+///
+/// Takes effect only alongside [`RUN_WINDOW_FLAG`]; see [`parse_backend_selection`].
+pub const BACKEND_FLAG: &str = "--backend";
+
+/// Equals-form prefix for [`BACKEND_FLAG`], dimensionless text.
+///
+/// Source: this module only; supports `--backend=<value>` alongside space form.
+pub const BACKEND_EQUALS_PREFIX: &str = "--backend=";
+
+/// Backend value selecting automatic scored probing, dimensionless label.
+///
+/// Source: this module only; default when [`BACKEND_FLAG`] is absent.
+pub const BACKEND_AUTO_LABEL: &str = "auto";
+
+/// Backend value selecting Vulkan, dimensionless label.
+///
+/// Source: wgpu 30 `Backend::Vulkan` display name.
+pub const BACKEND_VULKAN_LABEL: &str = "vulkan";
+
+/// Backend value selecting Dx12, dimensionless label.
+///
+/// Source: wgpu 30 `Backend::Dx12` display name.
+pub const BACKEND_DX12_LABEL: &str = "dx12";
+
+/// Backend value selecting GL over ANGLE, dimensionless label.
+///
+/// Source: wgpu 30 `Backend::Gl` display name.
+pub const BACKEND_GL_LABEL: &str = "gl";
+
+/// Backend label for Metal in the scored order, dimensionless label.
+///
+/// Source: wgpu 30 `Backend::Metal` display name; automatic order only.
+pub const BACKEND_METAL_LABEL: &str = "metal";
+
 /// Frame budget in milliseconds (`FRAME_BUDGET_MS`).
 ///
 /// Source: `docs/tech/debug.md` section 2; gates live in `docs/tech/quality.md`.
@@ -201,6 +236,40 @@ const BACKEND_SCORE_OTHER_U8: u8 = 0;
 /// driver logs point at the OS window path.
 const DEVICE_LABEL: &str = "universe-os-window";
 
+/// Intel PCI vendor ID, dimensionless.
+///
+/// Source: PCI-SIG vendor registry; measured wgpu `vendor=0x8086` on the
+/// issue #50 Step 2 host.
+const INTEL_VENDOR_ID_U32: u32 = 0x8086;
+
+/// Adapter name substring identifying the quarantined Intel part, dimensionless text.
+///
+/// Source: measured wgpu stdout `Intel(R) UHD Graphics 620` on the issue
+/// #50 Step 2 host.
+const QUARANTINED_ADAPTER_NAME_SUBSTRING: &str = "UHD Graphics 620";
+
+/// Quarantined driver version text for the quarantine reason line only, dimensionless text.
+///
+/// Source: measured App log `igvk64.dll` 31.0.101.2130 (issue #50 Step 2).
+/// Reason-text only, never matched: Step 5 measured the crashing Vulkan
+/// `AdapterInfo` as `driver=Intel Corporation` plus `driver_info=Intel driver`
+/// with the version in neither field, so no version conjunct can fire there.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Reason-text record for the skip line; the match never reads it (Step 5b)."
+    )
+)]
+const QUARANTINED_DRIVER_VERSION_TEXT: &str = "31.0.101.2130";
+
+/// Quarantine reason for the skipped Vulkan adapter, dimensionless text.
+///
+/// Source: issue #50 Step 2 App log ID 1000 fault in `igvk64.dll` at
+/// offset 0x64ea72; cause stays unconfirmed.
+const QUARANTINED_VULKAN_REASON_TEXT: &str =
+    "igvk64.dll 31.0.101.2130 AV offset=0x64ea72 (#50 Step2)";
+
 /// Reason for staying headless without opening a window.
 ///
 /// Returned by [`decide_launch`] so CI logs stay explicit.
@@ -254,6 +323,100 @@ pub enum LaunchDecision {
     StayHeadless(HeadlessReason),
 }
 
+/// Wgpu backend override for diagnostics.
+///
+/// `Auto` reproduces the scored Vulkan-first enumeration plus fallback chain.
+/// A named value restricts enumeration plus fallback to that backend only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BackendSelection {
+    /// Automatic scored probing across all backends.
+    Auto,
+    /// Vulkan backend only.
+    Vulkan,
+    /// Dx12 backend only.
+    Dx12,
+    /// GL over ANGLE backend only.
+    Gl,
+}
+
+impl Default for BackendSelection {
+    /// Default to automatic scored probing.
+    fn default() -> Self {
+        Self::Auto
+    }
+}
+
+impl BackendSelection {
+    /// Return the flag value label.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Auto => BACKEND_AUTO_LABEL,
+            Self::Vulkan => BACKEND_VULKAN_LABEL,
+            Self::Dx12 => BACKEND_DX12_LABEL,
+            Self::Gl => BACKEND_GL_LABEL,
+        }
+    }
+
+    /// Return the effective probe order label.
+    ///
+    /// `Auto` returns [`ADAPTER_BACKEND_ORDER_LABEL`]; named returns its label.
+    #[must_use]
+    pub const fn order_label(self) -> &'static str {
+        match self {
+            Self::Auto => ADAPTER_BACKEND_ORDER_LABEL,
+            Self::Vulkan => BACKEND_VULKAN_LABEL,
+            Self::Dx12 => BACKEND_DX12_LABEL,
+            Self::Gl => BACKEND_GL_LABEL,
+        }
+    }
+
+    /// Return the effective backends label for diagnostics.
+    ///
+    /// `Auto` returns [`ADAPTER_BACKENDS_LABEL`]; named returns its label.
+    #[must_use]
+    pub const fn backends_label(self) -> &'static str {
+        match self {
+            Self::Auto => ADAPTER_BACKENDS_LABEL,
+            Self::Vulkan => BACKEND_VULKAN_LABEL,
+            Self::Dx12 => BACKEND_DX12_LABEL,
+            Self::Gl => BACKEND_GL_LABEL,
+        }
+    }
+
+    /// Return the instance backends for adapter creation.
+    ///
+    /// `Auto` enables all backends; named enables one backend only.
+    #[must_use]
+    pub fn instance_backends(self) -> wgpu::Backends {
+        match self {
+            Self::Auto => wgpu::Backends::all(),
+            Self::Vulkan => wgpu::Backends::VULKAN,
+            Self::Dx12 => wgpu::Backends::DX12,
+            Self::Gl => wgpu::Backends::GL,
+        }
+    }
+
+    /// List backend probes in scored attempt order.
+    ///
+    /// `Auto` returns Vulkan, Dx12, Metal, GL; named returns one entry.
+    #[must_use]
+    pub fn probes(self) -> Vec<(wgpu::Backends, &'static str)> {
+        match self {
+            Self::Auto => ordered_backend_probes().to_vec(),
+            Self::Vulkan => vec![(wgpu::Backends::VULKAN, BACKEND_VULKAN_LABEL)],
+            Self::Dx12 => vec![(wgpu::Backends::DX12, BACKEND_DX12_LABEL)],
+            Self::Gl => vec![(wgpu::Backends::GL, BACKEND_GL_LABEL)],
+        }
+    }
+}
+
+impl core::fmt::Display for BackendSelection {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str(self.label())
+    }
+}
+
 /// OS window failures with typed variants.
 ///
 /// External winit plus wgpu errors keep their rendered detail as strings;
@@ -282,6 +445,8 @@ pub enum OsWindowError {
     Shell(ShellError),
     /// Budget denominators were rejected with rendered detail.
     Budgets(String),
+    /// Backend flag value was unknown with rendered detail.
+    Backend(String),
 }
 
 impl core::fmt::Display for OsWindowError {
@@ -305,6 +470,7 @@ impl core::fmt::Display for OsWindowError {
             Self::Snapshot(source) => write!(formatter, "os window snapshot: {source}"),
             Self::Shell(source) => write!(formatter, "os window shell: {source}"),
             Self::Budgets(detail) => write!(formatter, "os window budgets: {detail}"),
+            Self::Backend(detail) => write!(formatter, "os window backend: {detail}"),
         }
     }
 }
@@ -322,6 +488,7 @@ impl std::error::Error for OsWindowError {
             | Self::Device(_)
             | Self::SimInit(_)
             | Self::SimStep(_)
+            | Self::Backend(_)
             | Self::Budgets(_) => None,
         }
     }
@@ -347,6 +514,58 @@ impl From<InspectError> for OsWindowError {
 #[must_use]
 pub fn software_requested(args: &[String]) -> bool {
     args.iter().any(|arg| arg == SOFTWARE_FLAG)
+}
+
+/// Parse the backend override from command-line args.
+///
+/// Accepts `--backend <value>` plus `--backend=<value>`; absent flag returns
+/// [`BackendSelection::Auto`]. Values are `auto|vulkan|dx12|gl`, case-sensitive.
+/// Last flag wins when repeated. Window still needs [`RUN_WINDOW_FLAG`].
+///
+/// # Errors
+///
+/// Returns [`OsWindowError::Backend`] for a missing value or unknown value.
+pub fn parse_backend_selection(args: &[String]) -> Result<BackendSelection, OsWindowError> {
+    let mut selected = BackendSelection::Auto;
+    let mut pending_flag_bool = false;
+    for arg in args {
+        if pending_flag_bool {
+            selected = parse_backend_value(arg)?;
+            pending_flag_bool = false;
+            continue;
+        }
+        if arg == BACKEND_FLAG {
+            pending_flag_bool = true;
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix(BACKEND_EQUALS_PREFIX) {
+            selected = parse_backend_value(value)?;
+        }
+    }
+    if pending_flag_bool {
+        return Err(OsWindowError::Backend(format!(
+            "{BACKEND_FLAG} needs a value ({BACKEND_AUTO_LABEL}|{BACKEND_VULKAN_LABEL}|{BACKEND_DX12_LABEL}|{BACKEND_GL_LABEL}); got none"
+        )));
+    }
+    Ok(selected)
+}
+
+/// Parse one backend value into its selection.
+///
+/// # Errors
+///
+/// Returns [`OsWindowError::Backend`] for any value outside
+/// `auto|vulkan|dx12|gl`.
+fn parse_backend_value(value: &str) -> Result<BackendSelection, OsWindowError> {
+    match value {
+        BACKEND_AUTO_LABEL => Ok(BackendSelection::Auto),
+        BACKEND_VULKAN_LABEL => Ok(BackendSelection::Vulkan),
+        BACKEND_DX12_LABEL => Ok(BackendSelection::Dx12),
+        BACKEND_GL_LABEL => Ok(BackendSelection::Gl),
+        _ => Err(OsWindowError::Backend(format!(
+            "unknown backend '{value}'; expected {BACKEND_AUTO_LABEL}|{BACKEND_VULKAN_LABEL}|{BACKEND_DX12_LABEL}|{BACKEND_GL_LABEL} after {BACKEND_FLAG}"
+        ))),
+    }
 }
 
 /// Decide whether the process opens the OS window.
@@ -401,12 +620,14 @@ pub fn display_available_with(display_value: Option<&str>, wayland_value: Option
 
 /// Build the `NoAdapter` detail from a wgpu report.
 ///
-/// Names the probed backends plus the host OS and points at the headless
-/// demo so GPU-less logs stay actionable without opening a window.
+/// Names the effective probed backends plus the host OS and points at the
+/// headless demo so GPU-less logs stay actionable without opening a window.
+/// `Auto` reports [`ADAPTER_BACKENDS_LABEL`]; named reports its label.
 #[must_use]
-fn no_adapter_detail(wgpu_detail: &str) -> String {
+fn no_adapter_detail(wgpu_detail: &str, backend_selection: BackendSelection) -> String {
     format!(
-        "{wgpu_detail}; backends={ADAPTER_BACKENDS_LABEL}; host={}; {RUN_WINDOW_FLAG} needs a working GPU; run without the flag for the headless demo",
+        "{wgpu_detail}; backends={}; host={}; {RUN_WINDOW_FLAG} needs a working GPU; run without the flag for the headless demo",
+        backend_selection.backends_label(),
         std::env::consts::OS
     )
 }
@@ -448,10 +669,10 @@ fn backend_score_u8(backend: wgpu::Backend) -> u8 {
 #[must_use]
 fn ordered_backend_probes() -> [(wgpu::Backends, &'static str); 4] {
     [
-        (wgpu::Backends::VULKAN, "vulkan"),
-        (wgpu::Backends::DX12, "dx12"),
-        (wgpu::Backends::METAL, "metal"),
-        (wgpu::Backends::GL, "gl"),
+        (wgpu::Backends::VULKAN, BACKEND_VULKAN_LABEL),
+        (wgpu::Backends::DX12, BACKEND_DX12_LABEL),
+        (wgpu::Backends::METAL, BACKEND_METAL_LABEL),
+        (wgpu::Backends::GL, BACKEND_GL_LABEL),
     ]
 }
 
@@ -473,6 +694,62 @@ fn format_adapter_info(info: &wgpu::AdapterInfo) -> String {
     )
 }
 
+/// Report whether adapter info matches the quarantined Intel Vulkan combo.
+///
+/// True only when backend is Vulkan, vendor is Intel, and the name holds the
+/// quarantined part. No driver-version conjunct: Step 5 measured the crashing
+/// Vulkan `AdapterInfo` as `driver=Intel Corporation` plus
+/// `driver_info=Intel driver` with the version in neither field, so a version
+/// check can never fire on the crashing path. Pure matcher so headless tests
+/// cover it without a GPU.
+#[must_use]
+fn is_quarantined_intel_vulkan_adapter(info: &wgpu::AdapterInfo) -> bool {
+    info.backend == wgpu::Backend::Vulkan
+        && info.vendor == INTEL_VENDOR_ID_U32
+        && info.name.contains(QUARANTINED_ADAPTER_NAME_SUBSTRING)
+}
+
+/// Report whether the Auto path must skip this adapter.
+///
+/// True only for [`BackendSelection::Auto`] with a quarantined match;
+/// explicit backend selections never skip. Pure gate for tests plus ranking.
+#[must_use]
+fn should_skip_quarantined_adapter(
+    info: &wgpu::AdapterInfo,
+    backend_selection: BackendSelection,
+) -> bool {
+    backend_selection == BackendSelection::Auto && is_quarantined_intel_vulkan_adapter(info)
+}
+
+/// Format the quarantine skip line for boot logging.
+///
+/// Carries the skipped backend, full adapter name, vendor, driver plus
+/// driver detail, reason, and fallback order. Pure formatter so headless
+/// tests cover it without a GPU.
+#[must_use]
+fn format_quarantine_skip(info: &wgpu::AdapterInfo) -> String {
+    format!(
+        "skipped backend={} name={} vendor={:#06x} driver={} driver_info={} reason={} fallback_order={}",
+        BACKEND_VULKAN_LABEL,
+        info.name,
+        info.vendor,
+        info.driver,
+        info.driver_info,
+        QUARANTINED_VULKAN_REASON_TEXT,
+        ADAPTER_BACKEND_ORDER_LABEL,
+    )
+}
+
+/// Log a quarantined Vulkan skip at boot.
+///
+/// Emits the [`format_quarantine_skip`] summary through `tracing::info!`
+/// plus stdout alongside the adapter logs. Init-time only.
+fn log_quarantine_skip(info: &wgpu::AdapterInfo) {
+    let summary = format_quarantine_skip(info);
+    tracing::info!("os_window {summary}");
+    println!("os_window {summary}");
+}
+
 /// Log the chosen adapter at boot.
 ///
 /// Emits the [`format_adapter_info`] summary through `tracing::info!` plus
@@ -481,6 +758,31 @@ fn log_adapter_info(adapter: &wgpu::Adapter) {
     let summary = format_adapter_info(&adapter.get_info());
     tracing::info!("os_window {summary}");
     println!("os_window {summary}");
+}
+
+/// Log the effective backend override at boot.
+///
+/// Emits the [`BackendSelection::label`] through `tracing::info!` plus stdout
+/// alongside [`log_adapter_info`] so CI logs show the override. Init-time only.
+fn log_backend_selection(backend_selection: BackendSelection) {
+    tracing::info!("os_window backend={}", backend_selection.label());
+    println!("os_window backend={}", backend_selection.label());
+}
+
+/// Build the wgpu instance scoped to the backend override.
+///
+/// `Auto` uses `new_without_display_handle` exactly as before; named backends
+/// restrict `backends` to one entry so enumeration plus fallback requests stay
+/// within that backend. Init-time only.
+fn create_instance(backend_selection: BackendSelection) -> wgpu::Instance {
+    if backend_selection == BackendSelection::Auto {
+        wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle())
+    } else {
+        wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: backend_selection.instance_backends(),
+            ..wgpu::InstanceDescriptor::new_without_display_handle()
+        })
+    }
 }
 
 /// Report whether an adapter can present to the surface.
@@ -507,11 +809,15 @@ fn is_surface_compatible(
 /// Pick the best surface-compatible adapter from one backend list.
 ///
 /// Scores each compatible adapter by backend then device type and clones
-/// the winner. Returns `None` when no entry is surface-compatible.
+/// the winner. Under [`BackendSelection::Auto`] the quarantined Intel Vulkan
+/// combo from [`should_skip_quarantined_adapter`] is skipped with a
+/// [`log_quarantine_skip`] line; explicit selections never skip. Returns
+/// `None` when no entry is surface-compatible.
 #[must_use]
 fn best_adapter_in_list(
     adapters: &[wgpu::Adapter],
     compatible_surface: Option<&wgpu::Surface<'_>>,
+    backend_selection: BackendSelection,
 ) -> Option<wgpu::Adapter> {
     let mut best_rank_u8: Option<(u8, u8)> = None;
     let mut best_adapter: Option<wgpu::Adapter> = None;
@@ -520,6 +826,10 @@ fn best_adapter_in_list(
             continue;
         }
         let info = adapter.get_info();
+        if should_skip_quarantined_adapter(&info, backend_selection) {
+            log_quarantine_skip(&info);
+            continue;
+        }
         let rank_u8 = (
             backend_score_u8(info.backend),
             device_type_score_u8(info.device_type),
@@ -538,39 +848,51 @@ fn best_adapter_in_list(
 
 /// Request a wgpu adapter across scored backends then fallback attempts.
 ///
-/// Enumerates [`ordered_backend_probes`] (Vulkan, Dx12, Metal, GL) and picks
-/// the best surface-compatible adapter in each backend by device score
-/// (discrete, integrated, other, virtual, CPU). Returns the first backend
-/// with a pick and logs it with [`log_adapter_info`]. When enumeration
-/// yields no compatible adapter, falls back to the hardware then software
-/// request chain under the given surface constraint, logging that winner
-/// too. With `software_mode_bool` (from [`SOFTWARE_FLAG`]) the scored
-/// enumeration plus hardware requests are skipped and the low-power
-/// force-fallback software request runs first, labeled `fallback software`.
-/// The instance enables [`ADAPTER_BACKENDS_LABEL`], so Windows hosts
-/// also reach the secondary GL path over ANGLE. When every attempt fails,
-/// returns [`OsWindowError::NoAdapter`] joining each labeled attempt with
-/// host plus headless guidance. Init-time only; the frame loop never calls this.
+/// Enumerates the [`BackendSelection::probes`] order (`Auto` is Vulkan, Dx12,
+/// Metal, GL; named is one entry) and picks the best surface-compatible
+/// adapter in each backend by device score (discrete, integrated, other,
+/// virtual, CPU). Under `Auto` the quarantined Intel Vulkan combo is skipped
+/// with a [`log_quarantine_skip`] line so scoring falls through to Dx12 next;
+/// explicit selections probe unfiltered. Returns the first backend with a pick
+/// and logs the effective backend plus adapter with [`log_backend_selection`]
+/// and [`log_adapter_info`].
+/// When enumeration yields no compatible adapter, falls back to the hardware
+/// then software request chain under the given surface constraint on the
+/// backend-scoped instance from [`create_instance`], logging that winner too.
+/// With `software_mode_bool` (from [`SOFTWARE_FLAG`]) the scored enumeration
+/// plus hardware requests are skipped and the low-power force-fallback software
+/// request runs first, labeled `fallback software`. The `Auto` instance enables
+/// [`ADAPTER_BACKENDS_LABEL`], so Windows hosts also reach the secondary GL
+/// path over ANGLE; a named instance enables one backend only. When every
+/// attempt fails, returns [`OsWindowError::NoAdapter`] joining each labeled
+/// attempt with host plus headless guidance. Init-time only; the frame loop
+/// never calls this.
 fn request_adapter_with_fallbacks(
     instance: &wgpu::Instance,
     compatible_surface: Option<&wgpu::Surface<'_>>,
     software_mode_bool: bool,
+    backend_selection: BackendSelection,
 ) -> Result<wgpu::Adapter, OsWindowError> {
+    log_backend_selection(backend_selection);
     let mut reports: Vec<String> = Vec::new();
     if software_mode_bool {
         reports.push(format!(
-            "software mode ({SOFTWARE_FLAG}): skipped hardware enumeration; order={ADAPTER_BACKEND_ORDER_LABEL}"
+            "software mode ({SOFTWARE_FLAG}): skipped hardware enumeration; order={}",
+            backend_selection.order_label()
         ));
     } else {
-        for (backends, backend_label) in ordered_backend_probes() {
+        for (backends, backend_label) in backend_selection.probes() {
             let adapters = block_on_init(instance.enumerate_adapters(backends));
-            if let Some(adapter) = best_adapter_in_list(&adapters, compatible_surface) {
+            if let Some(adapter) =
+                best_adapter_in_list(&adapters, compatible_surface, backend_selection)
+            {
                 log_adapter_info(&adapter);
                 return Ok(adapter);
             }
             reports.push(format!(
-                "{backend_label}: no compatible adapter (enumerated {}); order={ADAPTER_BACKEND_ORDER_LABEL}",
-                adapters.len()
+                "{backend_label}: no compatible adapter (enumerated {}); order={}",
+                adapters.len(),
+                backend_selection.order_label()
             ));
         }
     }
@@ -611,6 +933,7 @@ fn request_adapter_with_fallbacks(
     }
     Err(OsWindowError::NoAdapter(no_adapter_detail(
         &reports.join("; "),
+        backend_selection,
     )))
 }
 
@@ -677,17 +1000,19 @@ fn request_device_with_fallback(
 
 /// Probe for any usable wgpu adapter before touching winit or a surface.
 ///
-/// Builds a short-lived headless instance over [`ADAPTER_BACKENDS_LABEL`]
-/// and runs the scored backend enumeration
-/// ([`ADAPTER_BACKEND_ORDER_LABEL`], Vulkan then Dx12 then Metal then GL,
-/// device score discrete then integrated then other then virtual then CPU)
-/// with no surface constraint, then the hardware-then-fallback request chain.
+/// Builds a short-lived headless instance over the effective backends
+/// (`Auto` is [`ADAPTER_BACKENDS_LABEL`]; named is one backend via
+/// [`create_instance`]) and runs the scored backend enumeration
+/// ([`ADAPTER_BACKEND_ORDER_LABEL`] for `Auto`, Vulkan then Dx12 then Metal
+/// then GL, device score discrete then integrated then other then virtual then
+/// CPU; named probes one backend only) with no surface constraint, then the
+/// hardware-then-fallback request chain on that scoped instance.
 /// With `software_mode_bool` (from [`SOFTWARE_FLAG`]) the probe skips hardware
 /// and requests the low-power force-fallback software adapter first.
-/// The winner logs backend, name, device type, and driver via
-/// [`log_adapter_info`]. Zero usable adapters return typed
-/// [`OsWindowError::NoAdapter`] before any window opens, so headless stays
-/// the default on GPU-less hosts.
+/// The winner logs the effective backend via [`log_backend_selection`] plus
+/// backend, name, device type, and driver via [`log_adapter_info`]. Zero usable
+/// adapters return typed [`OsWindowError::NoAdapter`] before any window opens,
+/// so headless stays the default on GPU-less hosts.
 ///
 /// Known upstream limitation (issue #44 Step 8, measured 2026-09-27 on a
 /// Windows host with Intel UHD 620, driver 31.0.101.2130, dx12 backend):
@@ -705,9 +1030,13 @@ fn request_device_with_fallback(
 /// that file. This probe keeps the graceful typed path for every failure
 /// wgpu does report, and fails fast before any window opens on hosts with
 /// zero usable adapters.
-fn preflight_adapter_probe(software_mode_bool: bool) -> Result<(), OsWindowError> {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-    request_adapter_with_fallbacks(&instance, None, software_mode_bool).map(|_adapter| ())
+fn preflight_adapter_probe(
+    software_mode_bool: bool,
+    backend_selection: BackendSelection,
+) -> Result<(), OsWindowError> {
+    let instance = create_instance(backend_selection);
+    request_adapter_with_fallbacks(&instance, None, software_mode_bool, backend_selection)
+        .map(|_adapter| ())
 }
 
 /// Run the ticker-only OS window until close.
@@ -717,20 +1046,26 @@ fn preflight_adapter_probe(software_mode_bool: bool) -> Result<(), OsWindowError
 /// a fixed-step demo orbit, and returns after close or a fatal error.
 /// With `software_mode_bool` (from [`SOFTWARE_FLAG`]) both the pre-flight
 /// probe and the window-bound adapter pick skip hardware and request the
-/// low-power force-fallback software adapter first.
+/// low-power force-fallback software adapter first. `backend_selection` (from
+/// [`BACKEND_FLAG`]) restricts both the probe and the window-bound pick to one
+/// backend; `Auto` keeps the scored Vulkan-first order.
 ///
 /// # Errors
 ///
 /// Returns [`OsWindowError`] for event-loop, window, surface, adapter,
-/// device, sim, snapshot, shell, or budget failures. GPU-less hosts fail
+/// device, sim, snapshot, shell, budget, or backend failures. GPU-less hosts fail
 /// fast with typed [`OsWindowError::NoAdapter`] from the pre-flight probe
 /// before any window opens; see [`preflight_adapter_probe`].
-pub fn run_window(software_mode_bool: bool) -> Result<(), OsWindowError> {
-    preflight_adapter_probe(software_mode_bool)?;
+pub fn run_window(
+    software_mode_bool: bool,
+    backend_selection: BackendSelection,
+) -> Result<(), OsWindowError> {
+    preflight_adapter_probe(software_mode_bool, backend_selection)?;
     let event_loop =
         EventLoop::new().map_err(|error| OsWindowError::EventLoop(error.to_string()))?;
     let mut app = WindowApp {
         software_mode_bool,
+        backend_selection,
         ..WindowApp::default()
     };
     event_loop
@@ -754,6 +1089,8 @@ struct WindowApp {
     fatal: Option<OsWindowError>,
     /// True when [`SOFTWARE_FLAG`] forces the fallback adapter.
     software_mode_bool: bool,
+    /// Backend override from [`BACKEND_FLAG`]; probe and window agree.
+    backend_selection: BackendSelection,
 }
 
 impl ApplicationHandler for WindowApp {
@@ -761,7 +1098,7 @@ impl ApplicationHandler for WindowApp {
         if self.active.is_some() {
             return;
         }
-        match ActiveWindow::create(event_loop, self.software_mode_bool) {
+        match ActiveWindow::create(event_loop, self.software_mode_bool, self.backend_selection) {
             Ok(active) => {
                 event_loop.set_control_flow(ControlFlow::Poll);
                 self.active = Some(active);
@@ -958,7 +1295,8 @@ impl ActiveWindow {
     /// Runs on the main thread inside resume; blocks only here while the
     /// adapter plus device resolve. The frame loop never blocks. Adapter
     /// resolution runs the scored backend enumeration plus fallback chain in
-    /// [`request_adapter_with_fallbacks`], or the forced low-power
+    /// [`request_adapter_with_fallbacks`] on the [`create_instance`] scope
+    /// for `backend_selection` (from [`BACKEND_FLAG`]), or the forced low-power
     /// force-fallback software path when `software_mode_bool` holds
     /// ([`SOFTWARE_FLAG`]); device resolution uses the
     /// conservative descriptor plus one force-fallback retry in
@@ -973,6 +1311,7 @@ impl ActiveWindow {
     fn create(
         event_loop: &ActiveEventLoop,
         software_mode_bool: bool,
+        backend_selection: BackendSelection,
     ) -> Result<Self, OsWindowError> {
         let shell = DesktopWindow::open()?;
         let size_config = shell.config();
@@ -987,12 +1326,16 @@ impl ActiveWindow {
                 .create_window(attrs)
                 .map_err(|error| OsWindowError::Window(error.to_string()))?,
         );
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let instance = create_instance(backend_selection);
         let surface = instance
             .create_surface(Arc::clone(&window))
             .map_err(|error| OsWindowError::Surface(error.to_string()))?;
-        let adapter =
-            request_adapter_with_fallbacks(&instance, Some(&surface), software_mode_bool)?;
+        let adapter = request_adapter_with_fallbacks(
+            &instance,
+            Some(&surface),
+            software_mode_bool,
+            backend_selection,
+        )?;
         let capabilities = surface.get_capabilities(&adapter);
         let Some(format) = capabilities
             .formats
@@ -1639,12 +1982,23 @@ mod tests {
 
     #[test]
     fn no_adapter_detail_names_backends_host_and_headless_path() {
-        let detail = no_adapter_detail("wgpu-probe-report");
+        let detail = no_adapter_detail("wgpu-probe-report", BackendSelection::Auto);
         assert!(detail.contains("wgpu-probe-report"));
         assert!(detail.contains(ADAPTER_BACKENDS_LABEL));
         assert!(detail.contains(std::env::consts::OS));
         assert!(detail.contains(RUN_WINDOW_FLAG));
         assert!(detail.contains("headless"));
+    }
+
+    #[test]
+    fn no_adapter_detail_restricts_backends_label_per_backend() {
+        let vulkan_detail = no_adapter_detail("probe", BackendSelection::Vulkan);
+        assert!(vulkan_detail.contains(BACKEND_VULKAN_LABEL));
+        assert!(!vulkan_detail.contains(ADAPTER_BACKENDS_LABEL));
+        let dx12_detail = no_adapter_detail("probe", BackendSelection::Dx12);
+        assert!(dx12_detail.contains(BACKEND_DX12_LABEL));
+        let gl_detail = no_adapter_detail("probe", BackendSelection::Gl);
+        assert!(gl_detail.contains(BACKEND_GL_LABEL));
     }
 
     #[test]
@@ -1744,7 +2098,100 @@ mod tests {
     #[test]
     fn best_adapter_in_empty_list_is_none() {
         let empty: Vec<wgpu::Adapter> = Vec::new();
-        assert!(best_adapter_in_list(&empty, None).is_none());
+        assert!(best_adapter_in_list(&empty, None, BackendSelection::Auto).is_none());
+        assert!(best_adapter_in_list(&empty, None, BackendSelection::Vulkan).is_none());
+    }
+
+    fn quarantined_vulkan_info(driver: &str, driver_info: &str) -> wgpu::AdapterInfo {
+        let mut info =
+            wgpu::AdapterInfo::new(wgpu::DeviceType::IntegratedGpu, wgpu::Backend::Vulkan);
+        info.name = String::from("Intel(R) UHD Graphics 620");
+        info.vendor = INTEL_VENDOR_ID_U32;
+        info.driver = String::from(driver);
+        info.driver_info = String::from(driver_info);
+        info
+    }
+
+    #[test]
+    fn quarantine_matches_measured_vulkan_tuple() {
+        let info = quarantined_vulkan_info("Intel Corporation", "Intel driver");
+        assert!(is_quarantined_intel_vulkan_adapter(&info));
+    }
+
+    #[test]
+    fn quarantine_matches_with_version_in_driver() {
+        let info = quarantined_vulkan_info(QUARANTINED_DRIVER_VERSION_TEXT, "vulkan-detail");
+        assert!(is_quarantined_intel_vulkan_adapter(&info));
+    }
+
+    #[test]
+    fn quarantine_matches_with_version_in_driver_info() {
+        let info = quarantined_vulkan_info("Intel Corporation", "4.6.0 Build 31.0.101.2130");
+        assert!(is_quarantined_intel_vulkan_adapter(&info));
+    }
+
+    #[test]
+    fn quarantine_rejects_wrong_backend() {
+        let mut info = quarantined_vulkan_info("Intel Corporation", "Intel driver");
+        info.backend = wgpu::Backend::Dx12;
+        assert!(!is_quarantined_intel_vulkan_adapter(&info));
+    }
+
+    #[test]
+    fn quarantine_rejects_wrong_vendor() {
+        let mut info = quarantined_vulkan_info("Intel Corporation", "Intel driver");
+        info.vendor = 0x10DE;
+        assert!(!is_quarantined_intel_vulkan_adapter(&info));
+    }
+
+    #[test]
+    fn quarantine_rejects_wrong_name() {
+        let mut info = quarantined_vulkan_info("Intel Corporation", "Intel driver");
+        info.name = String::from("Intel(R) UHD Graphics 630");
+        assert!(!is_quarantined_intel_vulkan_adapter(&info));
+    }
+
+    #[test]
+    fn quarantine_rejects_version_without_model() {
+        let mut info = quarantined_vulkan_info(QUARANTINED_DRIVER_VERSION_TEXT, "");
+        info.name = String::from("Intel(R) UHD Graphics 630");
+        assert!(!is_quarantined_intel_vulkan_adapter(&info));
+    }
+
+    #[test]
+    fn quarantine_skips_only_in_auto() {
+        let info = quarantined_vulkan_info("Intel Corporation", "Intel driver");
+        assert!(should_skip_quarantined_adapter(
+            &info,
+            BackendSelection::Auto
+        ));
+        assert!(!should_skip_quarantined_adapter(
+            &info,
+            BackendSelection::Vulkan
+        ));
+        assert!(!should_skip_quarantined_adapter(
+            &info,
+            BackendSelection::Dx12
+        ));
+        assert!(!should_skip_quarantined_adapter(
+            &info,
+            BackendSelection::Gl
+        ));
+    }
+
+    #[test]
+    fn quarantine_skip_line_carries_mandatory_fields() {
+        let info = quarantined_vulkan_info("Intel Corporation", "4.6.0 Build 31.0.101.2130");
+        let line = format_quarantine_skip(&info);
+        assert!(line.contains("skipped backend=vulkan"));
+        assert!(line.contains("Intel(R) UHD Graphics 620"));
+        assert!(line.contains("0x8086"));
+        assert!(line.contains("Intel Corporation"));
+        assert!(line.contains("4.6.0 Build 31.0.101.2130"));
+        assert!(line.contains("igvk64.dll"));
+        assert!(line.contains("0x64ea72"));
+        assert!(line.contains("#50"));
+        assert!(line.contains(ADAPTER_BACKEND_ORDER_LABEL));
     }
 
     #[test]
@@ -1780,6 +2227,199 @@ mod tests {
     #[test]
     fn software_with_run_window_keeps_display_gate() {
         let both = args_of(&["universe-debug", "--run-window", "--software"]);
+        assert_eq!(decide_launch_with(&both, true), LaunchDecision::OpenWindow);
+        assert_eq!(
+            decide_launch_with(&both, false),
+            LaunchDecision::StayHeadless(HeadlessReason::DisplayMissing)
+        );
+    }
+
+    #[test]
+    fn backend_flag_constant_spells_backend() {
+        assert_eq!(BACKEND_FLAG, "--backend");
+        assert_eq!(BACKEND_EQUALS_PREFIX, "--backend=");
+        assert_eq!(BACKEND_AUTO_LABEL, "auto");
+        assert_eq!(BACKEND_VULKAN_LABEL, "vulkan");
+        assert_eq!(BACKEND_DX12_LABEL, "dx12");
+        assert_eq!(BACKEND_GL_LABEL, "gl");
+        assert_eq!(BACKEND_METAL_LABEL, "metal");
+    }
+
+    #[test]
+    fn backend_selection_defaults_to_auto() {
+        let empty: Vec<String> = Vec::new();
+        let Ok(selection) = parse_backend_selection(&empty) else {
+            panic!("empty args must parse to auto")
+        };
+        assert_eq!(selection, BackendSelection::Auto);
+        let bare = args_of(&["universe-debug"]);
+        let Ok(selection) = parse_backend_selection(&bare) else {
+            panic!("missing flag must parse to auto")
+        };
+        assert_eq!(selection, BackendSelection::Auto);
+        let window_only = args_of(&["universe-debug", "--run-window"]);
+        let Ok(selection) = parse_backend_selection(&window_only) else {
+            panic!("window flag alone must parse to auto")
+        };
+        assert_eq!(selection, BackendSelection::Auto);
+        assert_eq!(BackendSelection::default(), BackendSelection::Auto);
+    }
+
+    #[test]
+    fn backend_selection_parses_space_and_equals_forms() {
+        for (value, expected) in [
+            ("auto", BackendSelection::Auto),
+            ("vulkan", BackendSelection::Vulkan),
+            ("dx12", BackendSelection::Dx12),
+            ("gl", BackendSelection::Gl),
+        ] {
+            let spaced = args_of(&["universe-debug", "--backend", value]);
+            let Ok(parsed) = parse_backend_selection(&spaced) else {
+                panic!("space form must parse {value}")
+            };
+            assert_eq!(parsed, expected);
+            let equals = args_of(&["universe-debug", &format!("--backend={value}")]);
+            let Ok(parsed) = parse_backend_selection(&equals) else {
+                panic!("equals form must parse {value}")
+            };
+            assert_eq!(parsed, expected);
+        }
+    }
+
+    #[test]
+    fn backend_selection_rejects_unknown_and_missing_values() {
+        let unknown = args_of(&["universe-debug", "--backend", "metal"]);
+        assert!(matches!(
+            parse_backend_selection(&unknown),
+            Err(OsWindowError::Backend(_))
+        ));
+        let unknown_equals = args_of(&["universe-debug", "--backend=frobnicate"]);
+        let Err(OsWindowError::Backend(detail)) = parse_backend_selection(&unknown_equals) else {
+            panic!("unknown backend must be a typed error")
+        };
+        assert!(detail.contains(BACKEND_FLAG));
+        assert!(detail.contains("frobnicate"));
+        let missing = args_of(&["universe-debug", "--backend"]);
+        assert!(matches!(
+            parse_backend_selection(&missing),
+            Err(OsWindowError::Backend(_))
+        ));
+        let empty_value = args_of(&["universe-debug", "--backend="]);
+        assert!(matches!(
+            parse_backend_selection(&empty_value),
+            Err(OsWindowError::Backend(_))
+        ));
+    }
+
+    #[test]
+    fn backend_selection_last_flag_wins() {
+        let repeated = args_of(&["universe-debug", "--backend", "vulkan", "--backend=dx12"]);
+        let Ok(selection) = parse_backend_selection(&repeated) else {
+            panic!("repeated flags must parse")
+        };
+        assert_eq!(selection, BackendSelection::Dx12);
+    }
+
+    #[test]
+    fn backend_probes_restrict_to_selection() {
+        let auto = BackendSelection::Auto.probes();
+        assert_eq!(auto.len(), 4);
+        assert_eq!(auto[0].1, BACKEND_VULKAN_LABEL);
+        assert_eq!(auto[1].1, BACKEND_DX12_LABEL);
+        assert_eq!(auto[2].1, BACKEND_METAL_LABEL);
+        assert_eq!(auto[3].1, BACKEND_GL_LABEL);
+        assert_eq!(auto[0].0, wgpu::Backends::VULKAN);
+        assert_eq!(auto[1].0, wgpu::Backends::DX12);
+        assert_eq!(auto[2].0, wgpu::Backends::METAL);
+        assert_eq!(auto[3].0, wgpu::Backends::GL);
+        let vulkan = BackendSelection::Vulkan.probes();
+        assert_eq!(vulkan.len(), 1);
+        assert_eq!(vulkan[0], (wgpu::Backends::VULKAN, BACKEND_VULKAN_LABEL));
+        let dx12 = BackendSelection::Dx12.probes();
+        assert_eq!(dx12.len(), 1);
+        assert_eq!(dx12[0], (wgpu::Backends::DX12, BACKEND_DX12_LABEL));
+        let gl = BackendSelection::Gl.probes();
+        assert_eq!(gl.len(), 1);
+        assert_eq!(gl[0], (wgpu::Backends::GL, BACKEND_GL_LABEL));
+    }
+
+    #[test]
+    fn backend_labels_map_selection_to_order_and_backends() {
+        assert_eq!(
+            BackendSelection::Auto.order_label(),
+            ADAPTER_BACKEND_ORDER_LABEL
+        );
+        assert_eq!(
+            BackendSelection::Auto.backends_label(),
+            ADAPTER_BACKENDS_LABEL
+        );
+        assert_eq!(BackendSelection::Vulkan.order_label(), BACKEND_VULKAN_LABEL);
+        assert_eq!(
+            BackendSelection::Vulkan.backends_label(),
+            BACKEND_VULKAN_LABEL
+        );
+        assert_eq!(BackendSelection::Dx12.order_label(), BACKEND_DX12_LABEL);
+        assert_eq!(BackendSelection::Dx12.backends_label(), BACKEND_DX12_LABEL);
+        assert_eq!(BackendSelection::Gl.order_label(), BACKEND_GL_LABEL);
+        assert_eq!(BackendSelection::Gl.backends_label(), BACKEND_GL_LABEL);
+        assert_eq!(BackendSelection::Auto.label(), BACKEND_AUTO_LABEL);
+        assert_eq!(BackendSelection::Vulkan.to_string(), BACKEND_VULKAN_LABEL);
+    }
+
+    #[test]
+    fn backend_instance_backends_restrict_to_single() {
+        assert_eq!(
+            BackendSelection::Auto.instance_backends(),
+            wgpu::Backends::all()
+        );
+        assert_eq!(
+            BackendSelection::Vulkan.instance_backends(),
+            wgpu::Backends::VULKAN
+        );
+        assert_eq!(
+            BackendSelection::Dx12.instance_backends(),
+            wgpu::Backends::DX12
+        );
+        assert_eq!(BackendSelection::Gl.instance_backends(), wgpu::Backends::GL);
+    }
+
+    #[test]
+    fn backend_instances_build_without_gpu() {
+        for selection in [
+            BackendSelection::Auto,
+            BackendSelection::Vulkan,
+            BackendSelection::Dx12,
+            BackendSelection::Gl,
+        ] {
+            let _instance = create_instance(selection);
+        }
+    }
+
+    #[test]
+    fn backend_error_renders_detail() {
+        let error = OsWindowError::Backend(String::from("backend-detail"));
+        let rendered = error.to_string();
+        assert!(rendered.contains("os window backend"));
+        assert!(rendered.contains("backend-detail"));
+    }
+
+    #[test]
+    fn backend_alone_stays_headless_flag_missing() {
+        let backend_only = args_of(&["universe-debug", "--backend", "vulkan"]);
+        assert_eq!(
+            decide_launch_with(&backend_only, true),
+            LaunchDecision::StayHeadless(HeadlessReason::FlagMissing)
+        );
+        let backend_equals = args_of(&["universe-debug", "--backend=dx12"]);
+        assert_eq!(
+            decide_launch_with(&backend_equals, false),
+            LaunchDecision::StayHeadless(HeadlessReason::FlagMissing)
+        );
+    }
+
+    #[test]
+    fn backend_with_run_window_keeps_display_gate() {
+        let both = args_of(&["universe-debug", "--run-window", "--backend", "gl"]);
         assert_eq!(decide_launch_with(&both, true), LaunchDecision::OpenWindow);
         assert_eq!(
             decide_launch_with(&both, false),
