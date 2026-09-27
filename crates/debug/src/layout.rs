@@ -426,13 +426,6 @@ pub const DESKTOP_WINDOW_HEIGHT_PT_F32: f32 = 800.0;
 /// Desktop window title text.
 ///
 /// Names the dev-only shell binary. Source: `crates/debug/Cargo.toml` binary name.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
-    )
-)]
 pub const DESKTOP_WINDOW_TITLE: &str = "universe-debug";
 
 /// Desktop flight-window configuration as plain data.
@@ -440,9 +433,8 @@ pub const DESKTOP_WINDOW_TITLE: &str = "universe-debug";
 /// Holds the scaffold size plus the visibility preset for the same-build
 /// scaled-up desktop shell. Content never forks between presets or devices;
 /// presets only switch visibility and size per `docs/tech/debug.md` 6.1.
-/// The OS window (winit event loop plus wgpu surface) lands in a later step;
-/// this config drives the headless-proven assembly meanwhile with no new
-/// dependencies and no lockfile change.
+/// The OS window in `os_window` reads this config for its initial size under
+/// D-003; headless tests use the same constructor.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DesktopWindowConfig {
     /// Window width in points.
@@ -506,26 +498,12 @@ impl DesktopWindowConfig {
     }
 
     /// Return the window width in points.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
-        )
-    )]
     #[must_use]
     pub const fn width_pt_f32(self) -> f32 {
         self.width_pt_f32
     }
 
     /// Return the window height in points.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "Bin smoke wiring lands in a later step; unit tests cover it meanwhile."
-        )
-    )]
     #[must_use]
     pub const fn height_pt_f32(self) -> f32 {
         self.height_pt_f32

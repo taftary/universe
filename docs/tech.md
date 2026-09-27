@@ -44,6 +44,10 @@ Decisions D-001..D-008 were confirmed on 2026-09-26; D-012..D-014 were locked on
 
 D-009 locks in #34 Phase A as the egui 0.36.2 plus paired egui-wgpu render bridge for the debug shell top bar, input router, inspect view, and DevDark-Pro base theme per [tech/debug.md](tech/debug.md) sections 4.1, 5, 7, 8, and 9 Phase A. Phase A reads the existing SimSnapshot (304-byte Pod, 263-byte hashed prefix from #32) and the existing warp codes (X1 through X10000), drop-reason codes (none, entry, approach, alarm), and `request_warp` / `should_auto_drop` / `apply_auto_drop` policy as-is with no engine sim change. Gaps found during Phase A become follow-up fixes, not scope expansion. `egui_plot`, `postcard`, and `egui_dock` stay deferred under D-010 and D-011. D-005 is unchanged.
 
+### D-003 first use note (#44 Step 6)
+
+Step 6 wires the winit 0.30.13 event loop plus wgpu 30.0.1 surface plus egui-wgpu 0.36.2 renderer in `crates/debug/src/os_window.rs` behind `dev-shell`, driving `DesktopWindow` ticker-only on the main thread with a fixed-step demo orbit. Headless CI never opens: explicit `--run-window` flag plus display gate. The direct `wgpu` edge stays on the locked 30.0 line with no new lock entries; engine sim stays winit-free and wgpu-free.
+
 ### D-010/D-011 Phase B note (#36 Step 1)
 
 Phase B draws continuity plots with egui Painter only, with no `egui_plot` lock. The bottom panel stays hand-placed tabs, with no `postcard` lock and no `egui_dock` lock. `Cargo.lock` is unchanged. Revisit D-010 or D-011 only with measured draw-cost evidence.

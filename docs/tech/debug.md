@@ -142,8 +142,11 @@ as `tester_readouts` on the window). The window assembly is `DesktopWindow`
 over one `Shell` plus `DesktopWindowConfig`: opens ticker-only and blind,
 switches to the Descent preset for handoff watching, draws through the existing
 headless egui context, and records shell draw cost on every draw. The OS window
-(winit event loop plus wgpu surface plus egui-wgpu renderer) lands in a later
-step; `winit` is not in `Cargo.lock`. Desktop gate for code is PASS:
+(winit event loop plus wgpu surface plus egui-wgpu renderer) lives in
+`crates/debug/src/os_window.rs` (Step 6, dev-shell only): it opens only with
+the explicit `--run-window` flag plus a display gate, drives the same
+`DesktopWindow` ticker-only on the main thread, and leaves headless gates
+green without a display. Desktop gate for code is PASS:
 headless sim smoke PASS plus DesktopTester AC4a PASS
 (`tests/legibility_descent.rs`, 5 tests) plus window-assembly headless PASS
 (`desktop_window_flies_descent_via_readouts`, `shell_draw=ok`, `desktop_tester`
@@ -153,6 +156,76 @@ postponed per user direction; no phone measurement is claimed here. Budget
 fractions cite `FRAME_BUDGET_MS`, `SIM_TICK_AVG_MS`, `SIM_TICK_P99_MS`,
 `SURFACE_HITCH_P95_MS`, `MEMORY_CEILING_MB`, and `COLD_START_S` by name only;
 gates live in [quality.md](quality.md).
+
+Step 7 headless-proven note (issue #44): `cargo test -p universe-debug
+--features dev-shell` holds 107 tests green (8 window unit tests) and the full
+`cargo test --features dev-shell` suite holds green; the no-flag binary prints
+`headless reason=missing --run-window; headless demo only` with `ticks=4` plus
+`shell_draw=ok` plus the `desktop_tester` smoke line and never opens a window.
+The `--run-window` display gate plus the ticker-only assembly plus the
+`draw_measured` cost hook are pinned by `tests/os_window_ticker.rs`; `cargo
+test` carries no flag so no test opens a window. Live window open stays
+UNPROVEN on display-less CI hosts: `--run-window` needs a display plus a
+working wgpu adapter (immediate `STATUS_ACCESS_VIOLATION` exit observed on a
+GPU-less Windows host). Validate live with
+`cargo run -p universe-debug --features dev-shell -- --run-window` on a
+display host and close the window to exit.
+
+Step 8 GPU-less note (issue #44): `--run-window` pre-flights the wgpu adapter
+(hardware high-performance, then low-power, then force-fallback software over
+`dx12+vulkan+metal+gl(ANGLE)`) before winit opens a window; zero usable
+adapters return typed `OsWindowError::NoAdapter` with host plus backend detail
+and the headless guidance, so headless stays default and our code never
+crashes (no unchecked blocks, `unwrap`, or `expect` on the probe path).
+Known upstream limitation, measured 2026-09-27 on a Windows host with Intel
+UHD 620 (driver 31.0.101.2130, dx12 backend): the headless pre-flight
+succeeds and the window-bound path reaches window, surface, and
+compatible-adapter creation, then exits `STATUS_ACCESS_VIOLATION` inside
+`Adapter::request_device` before wgpu reports any `Err`. That fault is below
+`crates/debug/src/os_window.rs` and cannot be caught from safe Rust; the
+typed `Device` error covers only failures wgpu reports. Record host, driver,
+and backend and reopen D-003 per the kill-switch in [stack.md](stack.md) if
+it triggers. GPU-less `--run-window` stays UNPROVEN live: this host has a
+GPU, so the zero-adapter typed path is unit-covered only.
+
+Step 8c GPU floor plus adapter diagnostics (issue #44): `--run-window` needs
+a working wgpu backend (Vulkan-capable GPU floor); headless stays the default
+and the no-flag binary never opens a window. Adapter selection enumerates
+backends in `vulkan>dx12>metal>gl` order (Metal between Dx12 and GL on Apple
+hosts, preserving the Vulkan to Dx12 to GL order) and scores device types
+`discrete>integrated>other>virtual>cpu` per the reference scoring; the
+`dx12+vulkan+metal+gl(ANGLE)` all-backends set is unchanged and each attempt
+is labeled in `NoAdapter` detail. The chosen adapter logs backend, name,
+device type, and driver at boot via `tracing::info!` plus stdout. Known fault,
+measured 2026-09-27 on Windows with Intel UHD 620-class (driver 31.0.101.x,
+dx12 backend): probe, window, surface, and compatible-adapter creation
+succeed, then `Adapter::request_device` exits `STATUS_ACCESS_VIOLATION` below
+this module (no raw handles, `unwrap`, `expect`, or unchecked blocks on this
+path), so no typed error can be produced when the driver faults. Record host,
+driver, and backend and reopen D-003 per [stack.md](stack.md) if it triggers.
+Engine stays `winit`-free and `wgpu`-free; the conservative device descriptor
+plus one force-fallback retry from Step 8b is unchanged.
+
+Step 8e live software-fallback validation (issue #44): `--run-window`
+with the software CPU fallback is PROVEN live on branch
+`task/44-winit-window` at `5fff303`: window opened YES at 1280x800 titled
+`universe-debug`, clickable YES with pause, resume, and step visible.
+Screenshot readouts at capture: `tick=1178`, `elapsed_s=58.90`, `warp=1x`
+with `drop=manual`, `step_s=0.05`, frame `0.00 ms` and `0 fps`,
+`health=nominal`, `seed=08d3`, `hash=739c`, clean shell cost `1.582 ms`
+(`4.7%` of `FRAME_BUDGET_MS`) nominal with close-shell affordance;
+inspect `tick 1178`, `elapsed 58.90`, `seed 08d3`, `hash 739c`; warp 1x
+manual, `regime=orbit`, `frame=Lv5 orbital`, `body=1`, `parent=0`,
+`depth=2`; `altitude 250000.0 m`, `speed 3172.5 m/s`, `pressure 0 Pa`,
+`temp 150.00 K`, `density 0 kg/m3`, `heat 0`, `g 0`; elements valid with
+`axis 3639500 m` and `ecc 0.0000`; pick invalid. Software path used the
+Microsoft Basic Render Driver CPU adapter from the prior run. Hardware
+path on Intel UHD 620 stays an upstream driver fault
+(`STATUS_ACCESS_VIOLATION` inside `Adapter::request_device`) as recorded
+in Step 8c. Frame `0.00 ms` and `0 fps` is flagged as
+first-frame and unfocused-window suspect; the `1.582 ms` shell cost is
+the observed cost evidence. Sustained frame cost stays to be measured on
+a GPU host.
 
 ### 6.2 Phone portrait
 
