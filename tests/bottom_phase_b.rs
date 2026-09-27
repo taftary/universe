@@ -248,6 +248,70 @@ const RAILS_BANDS_F64: [f64; 7] = [200.0, 5.0, 0.01, 1.0, 1e-6, 1_000.0, 0.1];
 #[cfg(feature = "dev-shell")]
 const SURFACE_BANDS_F64: [f64; 7] = [100.0, 20.0, 10.0, 1.0, 2e-4, 50_000.0, 10.0];
 
+/// Snapshot channels in monitor order for the Step 9 drives.
+#[cfg(all(feature = "dev-shell", not(miri)))]
+fn drive_channels_of(snapshot: &engine::inspect::SimSnapshot) -> [f64; 7] {
+    [
+        snapshot.altitude_m_f64,
+        snapshot.speed_mps_f64,
+        snapshot.pressure_pa_f64,
+        snapshot.temperature_k_f64,
+        snapshot.density_kg_m3_f64,
+        snapshot.heat_flux_w_per_m2_f64,
+        snapshot.g_load_g_f64,
+    ]
+}
+
+/// Capture one drive snapshot, panicking on rejection.
+#[cfg(all(feature = "dev-shell", not(miri)))]
+fn drive_capture_snapshot(
+    scheduler: &Scheduler,
+    state: &engine::trajectory::StateVector,
+    body: &engine::body::BodyParams,
+    atmosphere: &engine::atmosphere::AtmosphereParams,
+    vehicle: &engine::trajectory::VehicleParams,
+) -> engine::inspect::SimSnapshot {
+    match engine::inspect::capture_snapshot(
+        scheduler,
+        state,
+        body,
+        atmosphere,
+        vehicle,
+        GOLDEN_SEED_U64,
+        GOLDEN_SEED_U64,
+        engine::warp::Warp::X1,
+        true,
+        false,
+        false,
+    ) {
+        Ok(snapshot) => snapshot,
+        Err(error) => panic!("drive capture must succeed: {error}"),
+    }
+}
+
+/// Record a handoff when the regime changes between snapshots.
+#[cfg(all(feature = "dev-shell", not(miri)))]
+fn record_drive_transition(
+    records: &mut Vec<HandoffRecord>,
+    previous: &mut Option<(u8, [f64; 7])>,
+    snapshot: &engine::inspect::SimSnapshot,
+    channels_f64: [f64; 7],
+) {
+    if let Some((previous_regime_u8, previous_f64)) = previous
+        && *previous_regime_u8 != snapshot.regime_u8
+    {
+        let crossed_rails =
+            (previous_f64[0] > RAILS_ALTITUDE_M_F64) != (channels_f64[0] > RAILS_ALTITUDE_M_F64);
+        records.push(HandoffRecord {
+            is_rails_bool: crossed_rails,
+            before_f64: *previous_f64,
+            after_f64: channels_f64,
+            flagged_bool: flag_rule_fires(previous_f64, &channels_f64),
+        });
+    }
+    *previous = Some((snapshot.regime_u8, channels_f64));
+}
+
 /// Drive the Mars-like descent, returning handoff and flagged counts.
 ///
 /// Mirrors the engine headless descent (deorbit burn, fixed steps,
@@ -257,25 +321,11 @@ const SURFACE_BANDS_F64: [f64; 7] = [100.0, 20.0, 10.0, 1.0, 2e-4, 50_000.0, 10.
 fn drive_descent_handoffs() -> Vec<HandoffRecord> {
     use engine::atmosphere::AtmosphereParams;
     use engine::body::BodyParams;
-    use engine::inspect::capture_snapshot;
     use engine::orbit::Mu;
     use engine::trajectory::{
         Burn, BurnDirection, StateVector, VehicleParams, apply_burn, step_point_ship,
     };
-    use engine::warp::Warp;
     use glam::DVec3;
-
-    fn channels_of(snapshot: &engine::inspect::SimSnapshot) -> [f64; 7] {
-        [
-            snapshot.altitude_m_f64,
-            snapshot.speed_mps_f64,
-            snapshot.pressure_pa_f64,
-            snapshot.temperature_k_f64,
-            snapshot.density_kg_m3_f64,
-            snapshot.heat_flux_w_per_m2_f64,
-            snapshot.g_load_g_f64,
-        ]
-    }
 
     let body = BodyParams::mars_like();
     let atmosphere = match AtmosphereParams::mars_like() {
@@ -318,36 +368,9 @@ fn drive_descent_handoffs() -> Vec<HandoffRecord> {
         };
         current = sample.state;
         scheduler.advance();
-        let snapshot = match capture_snapshot(
-            &scheduler,
-            &current,
-            &body,
-            &atmosphere,
-            &vehicle,
-            GOLDEN_SEED_U64,
-            GOLDEN_SEED_U64,
-            Warp::X1,
-            true,
-            false,
-            false,
-        ) {
-            Ok(snapshot) => snapshot,
-            Err(error) => panic!("drive capture must succeed: {error}"),
-        };
-        let channels_f64 = channels_of(&snapshot);
-        if let Some((previous_regime_u8, previous_f64)) = previous {
-            if previous_regime_u8 != snapshot.regime_u8 {
-                let crossed_rails = (previous_f64[0] > RAILS_ALTITUDE_M_F64)
-                    != (channels_f64[0] > RAILS_ALTITUDE_M_F64);
-                records.push(HandoffRecord {
-                    is_rails_bool: crossed_rails,
-                    before_f64: previous_f64,
-                    after_f64: channels_f64,
-                    flagged_bool: flag_rule_fires(&previous_f64, &channels_f64),
-                });
-            }
-        }
-        previous = Some((snapshot.regime_u8, channels_f64));
+        let snapshot = drive_capture_snapshot(&scheduler, &current, &body, &atmosphere, &vehicle);
+        let channels_f64 = drive_channels_of(&snapshot);
+        record_drive_transition(&mut records, &mut previous, &snapshot, channels_f64);
         let radius_m = libm::sqrt(current.position_m.length_squared());
         if radius_m - body.radius_m().value() <= 0.0 {
             break;
@@ -365,25 +388,11 @@ fn drive_descent_handoffs() -> Vec<HandoffRecord> {
 fn drive_ascent_handoffs() -> Vec<HandoffRecord> {
     use engine::atmosphere::AtmosphereParams;
     use engine::body::BodyParams;
-    use engine::inspect::capture_snapshot;
     use engine::orbit::Mu;
     use engine::trajectory::{
         Burn, BurnDirection, StateVector, VehicleParams, apply_burn, step_point_ship,
     };
-    use engine::warp::Warp;
     use glam::DVec3;
-
-    fn channels_of(snapshot: &engine::inspect::SimSnapshot) -> [f64; 7] {
-        [
-            snapshot.altitude_m_f64,
-            snapshot.speed_mps_f64,
-            snapshot.pressure_pa_f64,
-            snapshot.temperature_k_f64,
-            snapshot.density_kg_m3_f64,
-            snapshot.heat_flux_w_per_m2_f64,
-            snapshot.g_load_g_f64,
-        ]
-    }
 
     let body = BodyParams::mars_like();
     let atmosphere = match AtmosphereParams::mars_like() {
@@ -410,34 +419,9 @@ fn drive_ascent_handoffs() -> Vec<HandoffRecord> {
     };
     let step = Seconds::new(0.05);
     let mut scheduler = Scheduler::default();
-    let seed_snapshot = match capture_snapshot(
-        &scheduler,
-        &current,
-        &body,
-        &atmosphere,
-        &vehicle,
-        GOLDEN_SEED_U64,
-        GOLDEN_SEED_U64,
-        Warp::X1,
-        true,
-        false,
-        false,
-    ) {
-        Ok(snapshot) => snapshot,
-        Err(error) => panic!("climb seed capture must succeed: {error}"),
-    };
-    let mut previous: Option<(u8, [f64; 7])> = Some((
-        seed_snapshot.regime_u8,
-        [
-            seed_snapshot.altitude_m_f64,
-            seed_snapshot.speed_mps_f64,
-            seed_snapshot.pressure_pa_f64,
-            seed_snapshot.temperature_k_f64,
-            seed_snapshot.density_kg_m3_f64,
-            seed_snapshot.heat_flux_w_per_m2_f64,
-            seed_snapshot.g_load_g_f64,
-        ],
-    ));
+    let seed_snapshot = drive_capture_snapshot(&scheduler, &current, &body, &atmosphere, &vehicle);
+    let mut previous: Option<(u8, [f64; 7])> =
+        Some((seed_snapshot.regime_u8, drive_channels_of(&seed_snapshot)));
     let mut records: Vec<HandoffRecord> = Vec::new();
     for _ in 0..DRIVE_MAX_STEPS_U32 {
         let radius_m = libm::sqrt(current.position_m.length_squared());
@@ -461,36 +445,9 @@ fn drive_ascent_handoffs() -> Vec<HandoffRecord> {
         };
         current = sample.state;
         scheduler.advance();
-        let snapshot = match capture_snapshot(
-            &scheduler,
-            &current,
-            &body,
-            &atmosphere,
-            &vehicle,
-            GOLDEN_SEED_U64,
-            GOLDEN_SEED_U64,
-            Warp::X1,
-            true,
-            false,
-            false,
-        ) {
-            Ok(snapshot) => snapshot,
-            Err(error) => panic!("climb capture must succeed: {error}"),
-        };
-        let channels_f64 = channels_of(&snapshot);
-        if let Some((previous_regime_u8, previous_f64)) = previous {
-            if previous_regime_u8 != snapshot.regime_u8 {
-                let crossed_rails = (previous_f64[0] > RAILS_ALTITUDE_M_F64)
-                    != (channels_f64[0] > RAILS_ALTITUDE_M_F64);
-                records.push(HandoffRecord {
-                    is_rails_bool: crossed_rails,
-                    before_f64: previous_f64,
-                    after_f64: channels_f64,
-                    flagged_bool: flag_rule_fires(&previous_f64, &channels_f64),
-                });
-            }
-        }
-        previous = Some((snapshot.regime_u8, channels_f64));
+        let snapshot = drive_capture_snapshot(&scheduler, &current, &body, &atmosphere, &vehicle);
+        let channels_f64 = drive_channels_of(&snapshot);
+        record_drive_transition(&mut records, &mut previous, &snapshot, channels_f64);
         let climbed_m = libm::sqrt(current.position_m.length_squared()) - body.radius_m().value();
         if climbed_m > RAILS_ALTITUDE_M_F64 {
             break;
