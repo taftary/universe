@@ -48,8 +48,24 @@ Scaffold left SIM_TICK_S and PRNG unpinned although simulation doc says fixed/pi
 - Exit: mvp.md pass/fail four tests pass, CI gates green.
 - Release: tag referenced here when cut.
 
+## Verification
+
+Verification pass 2026-09-27 on branch `task/42-m1-verification-release`, PR 43 (draft). Report: [M1-verification.md](M1-verification.md). GitHub milestone 2 remains open, 0 of 23 issues closed.
+
+Step 4 review verdict: NOT READY for release.
+
+- AC1 Continuity: PASS.
+- AC2 Repeatability: PASS, single-platform only.
+- AC3 Budget: FAIL, no on-device run (headless pass only).
+- AC4 Legibility: FAIL, no blind run yet.
+- AC5 CI gates: conditional PASS, PR 43 CI green on android/gates/ios/msrv (run 36334941078); local cross-targets NOT RUN.
+- AC6 Report: PASS, commit 6a9ce81.
+- AC7 Release: FAIL, no tag; v0.2.0 pending.
+
+Follow-ups are issue #42 Steps 8-10 (blind run, device run, tag).
+
 ## Next
 
-After #40 merges: M1 verification pass against the four [mvp.md](../topics/mvp.md) tests, then release.
+Blocked for release: blind legibility run (AC4), on-device budget run (AC3), and tag v0.2.0 (AC7). No release claimed until all three close.
 
 Related: [../../README.md](../../README.md), [../tech.md](../tech.md), [../agents/gh-orchestrator.md](../agents/gh-orchestrator.md).
