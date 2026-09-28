@@ -35,6 +35,10 @@ use crate::determinism::{DeterminismDraw, DeterminismWindow, ReplayReport};
 #[cfg(feature = "dev-shell")]
 use crate::layout::DesktopWindowConfig;
 #[cfg(feature = "dev-shell")]
+use crate::marks::{MarksError, MarksView, ViewMode};
+#[cfg(feature = "dev-shell")]
+use engine::body::MARS_RADIUS_M;
+#[cfg(feature = "dev-shell")]
 use engine::inspect::SimSnapshot;
 #[cfg(feature = "dev-shell")]
 use engine::regime::Regime;
@@ -68,6 +72,9 @@ pub enum ShellError {
     Tweak(TweakError),
     /// Console parse failure.
     Console(ConsoleError),
+    /// Marks-canvas camera or radius check failed.
+    #[cfg(feature = "dev-shell")]
+    Marks(MarksError),
 }
 
 impl core::fmt::Display for ShellError {
@@ -84,6 +91,8 @@ impl core::fmt::Display for ShellError {
             Self::Export(source) => write!(formatter, "shell export: {source}"),
             Self::Tweak(source) => write!(formatter, "shell tweak: {source}"),
             Self::Console(source) => write!(formatter, "shell console: {source}"),
+            #[cfg(feature = "dev-shell")]
+            Self::Marks(source) => write!(formatter, "shell marks: {source}"),
         }
     }
 }
@@ -102,6 +111,8 @@ impl std::error::Error for ShellError {
             Self::Export(source) => Some(source),
             Self::Tweak(source) => Some(source),
             Self::Console(source) => Some(source),
+            #[cfg(feature = "dev-shell")]
+            Self::Marks(source) => Some(source),
         }
     }
 }
@@ -180,6 +191,14 @@ impl From<ConsoleError> for ShellError {
     /// Convert a console failure into a shell failure.
     fn from(source: ConsoleError) -> Self {
         Self::Console(source)
+    }
+}
+
+#[cfg(feature = "dev-shell")]
+impl From<MarksError> for ShellError {
+    /// Convert a marks-view failure into a shell failure.
+    fn from(source: MarksError) -> Self {
+        Self::Marks(source)
     }
 }
 
@@ -277,7 +296,7 @@ pub struct DesktopTesterReadouts {
     pub frame_label: &'static str,
 }
 
-/// Debug shell assembly with run control, cost, input, and inspect.
+/// Debug shell assembly with run control, cost, input, inspect, and marks.
 ///
 /// Plain state only; observes snapshot scalars by copy and records its
 /// own draw cost. Shell state only and never persists.
@@ -291,6 +310,12 @@ pub struct Shell {
     router: InputRouter,
     /// Read-only inspect view over snapshot scalars.
     inspect: InspectView,
+    /// Read-only abstract-marks canvas over snapshot copies.
+    #[cfg(feature = "dev-shell")]
+    marks: MarksView,
+    /// Body radius in meters for the marks canvas circles.
+    #[cfg(feature = "dev-shell")]
+    body_radius_m_f64: f64,
     /// Continuity monitor with handoff markers.
     continuity: ContinuityMonitor,
     /// Budget strip with latest samples.
@@ -338,6 +363,10 @@ impl Shell {
             meter: ShellCostMeter::new(),
             router: InputRouter::new(),
             inspect: InspectView::new(TAP_PICK_TOLERANCE_PT_F32)?,
+            #[cfg(feature = "dev-shell")]
+            marks: MarksView::open()?,
+            #[cfg(feature = "dev-shell")]
+            body_radius_m_f64: MARS_RADIUS_M,
             continuity: ContinuityMonitor::new(),
             strip: BudgetStrip::new(),
             log: TraceLog::new(),
@@ -411,6 +440,171 @@ impl Shell {
     #[must_use]
     pub const fn inspect(&self) -> &InspectView {
         &self.inspect
+    }
+
+    /// Return the read-only abstract-marks canvas.
+    ///
+    /// Available only with the non-default `dev-shell` feature.
+    #[cfg(feature = "dev-shell")]
+    #[must_use]
+    pub const fn marks(&self) -> &MarksView {
+        &self.marks
+    }
+
+    /// Return the marks canvas for overlay selection.
+    ///
+    /// Shell state only; selection never writes sim state. Available only
+    /// with the non-default `dev-shell` feature.
+    #[cfg(feature = "dev-shell")]
+    pub const fn marks_mut(&mut self) -> &mut MarksView {
+        &mut self.marks
+    }
+
+    /// Return the marks-canvas body radius in meters.
+    ///
+    /// Available only with the non-default `dev-shell` feature.
+    #[cfg(feature = "dev-shell")]
+    #[must_use]
+    pub const fn body_radius_m_f64(&self) -> f64 {
+        self.body_radius_m_f64
+    }
+
+    /// Set the marks-canvas body radius in meters.
+    ///
+    /// Shell state only; the radius feeds circle marks and never writes
+    /// sim state. Available only with the non-default `dev-shell`
+    /// feature.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ShellError::Marks`] when the radius is non-finite or not
+    /// positive.
+    #[cfg(feature = "dev-shell")]
+    pub fn set_body_radius_m_f64(&mut self, radius_m_f64: f64) -> Result<(), ShellError> {
+        if !radius_m_f64.is_finite() || radius_m_f64 <= 0.0 {
+            return Err(ShellError::Marks(MarksError::InvalidRadius {
+                radius_m_f64,
+            }));
+        }
+        self.body_radius_m_f64 = radius_m_f64;
+        self.marks.sync_body_radius_m_f64(radius_m_f64);
+        Ok(())
+    }
+
+    /// Zoom the marks canvas to a view with a manual override.
+    ///
+    /// Pins the view until [`Self::clear_marks_manual_override`] or
+    /// [`Self::reset_marks_view`]; auto-select stays suspended meanwhile.
+    /// Shell state only and never persists.
+    #[cfg(feature = "dev-shell")]
+    pub fn zoom_marks_to_fit(&mut self, mode: ViewMode) {
+        let radius_m_f64 = self.body_radius_m_f64;
+        self.marks.zoom_to_fit(mode, radius_m_f64);
+    }
+
+    /// Set the marks-canvas manual zoom as a scale ratio with clamping.
+    ///
+    /// Finite factors clamp to the named marks limits; non-finite factors
+    /// keep the previous value. Shell state only and never persists.
+    /// Available only with the non-default `dev-shell` feature.
+    #[cfg(feature = "dev-shell")]
+    pub fn set_marks_zoom_factor_ratio_f64(&mut self, zoom_factor_ratio_f64: f64) {
+        self.marks.set_zoom_factor_ratio_f64(zoom_factor_ratio_f64);
+    }
+
+    /// Clear the marks manual override so auto-select resumes.
+    ///
+    /// Leaves the camera untouched; the next observed snapshot picks the
+    /// view. Shell state only and never persists.
+    #[cfg(feature = "dev-shell")]
+    pub fn clear_marks_manual_override(&mut self) {
+        self.marks.clear_manual_override();
+    }
+
+    /// Clear the marks manual override and restore unity zoom.
+    ///
+    /// Shell state only and never persists. Available only with the
+    /// non-default `dev-shell` feature.
+    #[cfg(feature = "dev-shell")]
+    pub fn reset_marks_view(&mut self) {
+        self.marks.reset_view();
+    }
+
+    /// Set the star overlay toggle without touching sim state.
+    ///
+    /// Safe view only; never taints the run and needs no pause.
+    /// Available only with the non-default `dev-shell` feature.
+    #[cfg(feature = "dev-shell")]
+    pub fn set_overlay_star_bool(&mut self, show_bool: bool) {
+        let mut overlays = self.marks.overlays();
+        overlays.set_star_bool(show_bool);
+        self.marks.set_overlays(overlays);
+    }
+
+    /// Set the planet overlay toggle without touching sim state.
+    ///
+    /// Safe view only; never taints the run and needs no pause.
+    /// Available only with the non-default `dev-shell` feature.
+    #[cfg(feature = "dev-shell")]
+    pub fn set_overlay_planet_bool(&mut self, show_bool: bool) {
+        let mut overlays = self.marks.overlays();
+        overlays.set_planet_bool(show_bool);
+        self.marks.set_overlays(overlays);
+    }
+
+    /// Set the atmosphere overlay toggle without touching sim state.
+    ///
+    /// Safe view only; never taints the run and needs no pause.
+    /// Available only with the non-default `dev-shell` feature.
+    #[cfg(feature = "dev-shell")]
+    pub fn set_overlay_atmosphere_bool(&mut self, show_bool: bool) {
+        let mut overlays = self.marks.overlays();
+        overlays.set_atmosphere_bool(show_bool);
+        self.marks.set_overlays(overlays);
+    }
+
+    /// Set the orbit overlay toggle without touching sim state.
+    ///
+    /// Safe view only; never taints the run and needs no pause.
+    /// Available only with the non-default `dev-shell` feature.
+    #[cfg(feature = "dev-shell")]
+    pub fn set_overlay_orbit_bool(&mut self, show_bool: bool) {
+        let mut overlays = self.marks.overlays();
+        overlays.set_orbit_bool(show_bool);
+        self.marks.set_overlays(overlays);
+    }
+
+    /// Set the trajectory overlay toggle without touching sim state.
+    ///
+    /// Safe view only; never taints the run and needs no pause.
+    /// Available only with the non-default `dev-shell` feature.
+    #[cfg(feature = "dev-shell")]
+    pub fn set_overlay_trajectory_bool(&mut self, show_bool: bool) {
+        let mut overlays = self.marks.overlays();
+        overlays.set_trajectory_bool(show_bool);
+        self.marks.set_overlays(overlays);
+    }
+
+    /// Set the ship overlay toggle without touching sim state.
+    ///
+    /// Safe view only; never taints the run and needs no pause.
+    /// Available only with the non-default `dev-shell` feature.
+    #[cfg(feature = "dev-shell")]
+    pub fn set_overlay_ship_bool(&mut self, show_bool: bool) {
+        let mut overlays = self.marks.overlays();
+        overlays.set_ship_bool(show_bool);
+        self.marks.set_overlays(overlays);
+    }
+
+    /// Set the grid overlay toggle without touching sim state.
+    ///
+    /// Safe view only; never taints the run and needs no pause.
+    /// Available only with the non-default `dev-shell` feature.
+    #[cfg(feature = "dev-shell")]
+    pub fn set_overlay_grid_bool(&mut self, show_bool: bool) {
+        let mut overlays = self.marks.overlays();
+        overlays.set_grid_bool(show_bool);
+        self.marks.set_overlays(overlays);
     }
 
     /// Return the continuity monitor.
@@ -712,8 +906,9 @@ impl Shell {
     /// Observe a snapshot by copy without writing sim state.
     ///
     /// Forwards clocks plus warp, seed, and hash to the top bar, records
-    /// the readout curves in the continuity monitor, and replaces the
-    /// inspect view. Available only with `dev-shell`.
+    /// the readout curves in the continuity monitor, pushes the marks
+    /// history, auto-selects the marks view from regime plus altitude, and
+    /// replaces the inspect view. Available only with `dev-shell`.
     ///
     /// # Errors
     ///
@@ -732,6 +927,12 @@ impl Shell {
         self.continuity.push_snapshot(snapshot)?;
         self.hash_ring
             .push(snapshot.tick_count_u64, snapshot.snapshot_hash_u64);
+        self.marks.push_snapshot(snapshot);
+        self.marks.update_view(
+            snapshot.regime_u8,
+            snapshot.altitude_m_f64,
+            self.body_radius_m_f64,
+        );
         if self.seed_view.master_seed_u64() != snapshot.master_seed_u64 {
             self.seed_view = SeedTreeView::from_master(snapshot.master_seed_u64);
         }
@@ -1113,13 +1314,17 @@ impl Shell {
         rows
     }
 
-    /// Draw top bar, router, inspector, bottom tabs, and window in one pass.
+    /// Draw top bar, left overlays, router, inspector, marks canvas, bottom, and window.
     ///
     /// Immediate-mode widgets only; creates no renderer. Skips everything
-    /// when closed; skips the bottom tabs and right panel unless the
-    /// current preset shows them; draws the determinism window when
-    /// open. Returns frame action flags for the game loop. Available
-    /// only with the non-default `dev-shell` feature.
+    /// when closed; paints the left overlay panel when the visibility shows
+    /// it; paints the marks canvas only when the visibility shows the
+    /// canvas (every preset except ticker-only); skips the bottom tabs
+    /// and right panel unless the current preset shows them; draws the
+    /// determinism window when open. Overlay checkboxes are safe views:
+    /// they never taint the run and need no pause. Returns frame action
+    /// flags for the game loop. Available only with the non-default
+    /// `dev-shell` feature.
     #[cfg(feature = "dev-shell")]
     pub fn draw(
         &mut self,
@@ -1138,6 +1343,15 @@ impl Shell {
             .draw(ctx, ui, &mut self.meter, frame_budget_ms_f64);
         self.router.draw(ui);
         self.inspect.draw(ui);
+        if self.visibility.shows_left_panel() {
+            self.draw_left_overlays(ui);
+        }
+        if self.visibility.shows_marks_canvas_bool()
+            && let Some(snapshot) = self.last_snapshot
+        {
+            self.marks
+                .draw(ui, &snapshot, self.body_radius_m_f64, self.visibility);
+        }
         if self.visibility.shows_bottom_tabs() {
             let content = BottomDraw {
                 monitor: &self.continuity,
@@ -1167,6 +1381,39 @@ impl Shell {
         ShellAction {
             export_requested_bool,
         }
+    }
+
+    /// Draw the left overlay panel with regime plus safe toggles.
+    ///
+    /// Shows the regime indicator with altitude plus one checkbox per
+    /// mark class. Checkboxes are safe views; they never taint the run
+    /// and need no pause. Available only with the non-default
+    /// `dev-shell` feature.
+    #[cfg(feature = "dev-shell")]
+    fn draw_left_overlays(&mut self, ui: &mut egui::Ui) {
+        let regime_label: &'static str = self.inspect.regime_label();
+        let altitude_m_f64 = self.inspect.altitude_m_f64();
+        let view_label: &'static str = self.marks.view().label();
+        let zoom_factor_ratio_f64 = self.marks.zoom_factor_ratio_f64();
+        let marks = &mut self.marks;
+        egui::Panel::left("debug-left-overlays").show(ui, |ui| {
+            ui.heading("Overlays");
+            ui.label(format!(
+                "regime={regime_label} altitude_m={altitude_m_f64:.1}"
+            ));
+            ui.label(format!("view={view_label} zoom={zoom_factor_ratio_f64:.2}"));
+            ui.separator();
+            ui.label("Toggles are safe; no taint, no pause needed.");
+            let mut overlays = marks.overlays();
+            ui.checkbox(&mut overlays.star_bool, "star point");
+            ui.checkbox(&mut overlays.planet_bool, "planet circle");
+            ui.checkbox(&mut overlays.atmosphere_bool, "atmosphere layers");
+            ui.checkbox(&mut overlays.orbit_bool, "orbit curve");
+            ui.checkbox(&mut overlays.trajectory_bool, "trajectory curve");
+            ui.checkbox(&mut overlays.ship_bool, "ship point");
+            ui.checkbox(&mut overlays.grid_bool, "surface grid");
+            marks.set_overlays(overlays);
+        });
     }
 }
 
@@ -1489,6 +1736,13 @@ mod tests {
         let console = ShellError::from(crate::console::ConsoleError::UnknownVerb);
         assert!(format!("{console}").contains("console"));
         assert!(std::error::Error::source(&top).is_some());
+        #[cfg(feature = "dev-shell")]
+        {
+            let marks =
+                ShellError::from(crate::marks::MarksError::InvalidRadius { radius_m_f64: 0.0 });
+            assert!(format!("{marks}").contains("marks"));
+            assert!(std::error::Error::source(&marks).is_some());
+        }
     }
 
     #[cfg(feature = "dev-shell")]
@@ -1548,6 +1802,7 @@ mod tests {
         );
         assert_eq!(shell.inspect().tick_count_u64(), 7);
         assert_eq!(shell.continuity().len_usize(), 1);
+        assert_eq!(shell.marks().history_len_usize(), 1);
         assert_eq!(shell.hash_ring().len_usize(), 1);
         assert_eq!(shell.seed_tree().master_seed_u64(), 0x1234_ABCD_5678_EF90);
         assert_eq!(shell.top_bar().tick_count_u64(), 7);
@@ -1613,6 +1868,191 @@ mod tests {
             mark_kind_u8: INSPECT_MARK_SHIP_POINT_U8,
             _pad_u8: [0_u8; 3],
         }
+    }
+
+    #[cfg(feature = "dev-shell")]
+    #[test]
+    fn marks_canvas_defaults_and_radius() {
+        use engine::body::MARS_RADIUS_M;
+        let mut shell = smoke_shell();
+        assert_eq!(shell.marks().history_len_usize(), 0);
+        assert_eq!(shell.marks().overlays(), crate::marks::OverlayFlags::all());
+        assert!((shell.body_radius_m_f64() - MARS_RADIUS_M).abs() < FRACTION_TOL_F64);
+        assert!(shell.set_body_radius_m_f64(MARS_RADIUS_M * 2.0).is_ok());
+        assert!((shell.body_radius_m_f64() - MARS_RADIUS_M * 2.0).abs() < FRACTION_TOL_F64);
+        assert!(matches!(
+            shell.set_body_radius_m_f64(f64::NAN),
+            Err(ShellError::Marks(_))
+        ));
+        assert!(matches!(
+            shell.set_body_radius_m_f64(0.0),
+            Err(ShellError::Marks(_))
+        ));
+        assert!(matches!(
+            shell.set_body_radius_m_f64(-1.0),
+            Err(ShellError::Marks(_))
+        ));
+    }
+
+    #[cfg(feature = "dev-shell")]
+    #[test]
+    fn overlay_toggles_cover_all_mark_classes_without_taint() {
+        let mut shell = smoke_shell();
+        assert!(!shell.top_bar().is_paused());
+        assert!(shell.top_bar().is_clean());
+        shell.set_overlay_star_bool(false);
+        assert!(!shell.marks().overlays().star_bool);
+        shell.set_overlay_planet_bool(false);
+        assert!(!shell.marks().overlays().planet_bool);
+        shell.set_overlay_atmosphere_bool(false);
+        assert!(!shell.marks().overlays().atmosphere_bool);
+        shell.set_overlay_orbit_bool(false);
+        assert!(!shell.marks().overlays().orbit_bool);
+        shell.set_overlay_trajectory_bool(false);
+        assert!(!shell.marks().overlays().trajectory_bool);
+        shell.set_overlay_ship_bool(false);
+        assert!(!shell.marks().overlays().ship_bool);
+        shell.set_overlay_grid_bool(false);
+        assert!(!shell.marks().overlays().grid_bool);
+        assert_eq!(shell.marks().overlays(), crate::marks::OverlayFlags::none());
+        assert!(shell.top_bar().is_clean());
+        assert!(!shell.top_bar().is_paused());
+        assert!(shell.recorder().is_empty());
+        shell.set_overlay_star_bool(true);
+        shell.set_overlay_planet_bool(true);
+        shell.set_overlay_atmosphere_bool(true);
+        shell.set_overlay_orbit_bool(true);
+        shell.set_overlay_trajectory_bool(true);
+        shell.set_overlay_ship_bool(true);
+        shell.set_overlay_grid_bool(true);
+        assert_eq!(shell.marks().overlays(), crate::marks::OverlayFlags::all());
+        assert!(shell.top_bar().is_clean());
+        assert!(!shell.top_bar().is_paused());
+    }
+
+    #[cfg(feature = "dev-shell")]
+    #[test]
+    fn descent_preset_shows_canvas_and_plots_ticker_shows_top_alone() {
+        let Ok(mut window) = DesktopWindow::open() else {
+            panic!("desktop window must open")
+        };
+        window.set_preset(DesktopPreset::Descent);
+        assert!(window.visibility().shows_top_bar());
+        assert!(window.visibility().shows_left_panel());
+        assert!(window.visibility().shows_bottom_tabs());
+        assert!(window.visibility().shows_marks_canvas_bool());
+        assert_eq!(
+            window.shell().bottom_tabs().selected(),
+            crate::bottom::BottomTab::Continuity
+        );
+        window.set_preset(DesktopPreset::TickerOnly);
+        assert!(window.visibility().shows_top_bar());
+        assert!(!window.visibility().shows_left_panel());
+        assert!(!window.visibility().shows_right_panel());
+        assert!(!window.visibility().shows_bottom_tabs());
+        assert!(!window.visibility().shows_marks_canvas_bool());
+    }
+
+    #[cfg(feature = "dev-shell")]
+    #[test]
+    fn observe_snapshot_auto_selects_marks_view() {
+        use crate::inspect_view::{INSPECT_REGIME_ATMOSPHERE_U8, INSPECT_REGIME_SURFACE_U8};
+        use crate::marks::ViewMode;
+        let mut shell = smoke_shell();
+        let mut snapshot = window_test_snapshot();
+        assert!(
+            shell.observe_snapshot(&snapshot).is_ok(),
+            "orbit snapshot must observe"
+        );
+        assert_eq!(shell.marks().view(), ViewMode::OrbitFit);
+        snapshot.regime_u8 = INSPECT_REGIME_ATMOSPHERE_U8;
+        snapshot.altitude_m_f64 = 50_000.0;
+        assert!(
+            shell.observe_snapshot(&snapshot).is_ok(),
+            "entry snapshot must observe"
+        );
+        assert_eq!(shell.marks().view(), ViewMode::EntryCorridor);
+        snapshot.regime_u8 = INSPECT_REGIME_SURFACE_U8;
+        snapshot.altitude_m_f64 = 0.0;
+        assert!(
+            shell.observe_snapshot(&snapshot).is_ok(),
+            "surface snapshot must observe"
+        );
+        assert_eq!(shell.marks().view(), ViewMode::SurfaceGrid);
+        shell.zoom_marks_to_fit(ViewMode::OrbitFit);
+        assert_eq!(shell.marks().view(), ViewMode::OrbitFit);
+        assert!(
+            shell.observe_snapshot(&snapshot).is_ok(),
+            "manual view must survive observe"
+        );
+        assert_eq!(shell.marks().view(), ViewMode::OrbitFit);
+        shell.clear_marks_manual_override();
+        assert!(
+            shell.observe_snapshot(&snapshot).is_ok(),
+            "cleared view must resume auto"
+        );
+        assert_eq!(shell.marks().view(), ViewMode::SurfaceGrid);
+        shell.set_marks_zoom_factor_ratio_f64(2.0);
+        assert!((shell.marks().zoom_factor_ratio_f64() - 2.0).abs() < FRACTION_TOL_F64);
+        shell.reset_marks_view();
+        assert!((shell.marks().zoom_factor_ratio_f64() - 1.0).abs() < FRACTION_TOL_F64);
+        assert_eq!(shell.marks().manual_override(), None);
+    }
+
+    #[cfg(feature = "dev-shell")]
+    #[test]
+    fn marks_canvas_paints_on_descent_and_holds_on_ticker() {
+        use crate::budget::BudgetDenominators;
+        let Ok(mut window) = DesktopWindow::open() else {
+            panic!("desktop window must open")
+        };
+        let snapshot = window_test_snapshot();
+        assert!(
+            window.observe_snapshot(&snapshot).is_ok(),
+            "window snapshot must observe"
+        );
+        assert_eq!(window.shell().marks().history_len_usize(), 1);
+        let Ok(budgets) = BudgetDenominators::new(
+            WINDOW_FRAME_BUDGET_MS_F64,
+            WINDOW_SIM_AVG_BUDGET_MS_F64,
+            WINDOW_SIM_P99_BUDGET_MS_F64,
+            WINDOW_HITCH_BUDGET_MS_F64,
+            WINDOW_MEMORY_BUDGET_MB_F64,
+            WINDOW_COLD_START_BUDGET_S_F64,
+        ) else {
+            panic!("window budgets must build")
+        };
+        window.set_preset(DesktopPreset::Descent);
+        let ctx = egui::Context::default();
+        let mut descent_result: Option<Result<ShellAction, ShellError>> = None;
+        let mut descent_output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            descent_result =
+                Some(window.draw_measured(&ctx, ui, WINDOW_FRAME_BUDGET_MS_F64, budgets, false));
+        });
+        descent_output.textures_delta.clear();
+        let Some(descent) = descent_result else {
+            panic!("descent draw must run")
+        };
+        assert!(descent.is_ok(), "descent draw must paint the canvas");
+        assert!(
+            !descent_output.shapes.is_empty(),
+            "descent draw must emit shapes"
+        );
+        window.set_preset(DesktopPreset::TickerOnly);
+        let mut ticker_result: Option<Result<ShellAction, ShellError>> = None;
+        let mut ticker_output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            ticker_result =
+                Some(window.draw_measured(&ctx, ui, WINDOW_FRAME_BUDGET_MS_F64, budgets, false));
+        });
+        ticker_output.textures_delta.clear();
+        let Some(ticker) = ticker_result else {
+            panic!("ticker draw must run")
+        };
+        assert!(ticker.is_ok(), "ticker draw must stay unchanged");
+        assert!(
+            ticker_output.shapes.len() < descent_output.shapes.len(),
+            "ticker-only must skip the marks canvas"
+        );
     }
 
     #[cfg(feature = "dev-shell")]

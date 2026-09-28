@@ -18,7 +18,7 @@ Nothing is rendered in the conventional sense. There are no meshes, textures, te
 - Surface: a grid.
 - Instruments: numeric readouts and readout-over-time plots.
 
-Everything is hand-placed from published reference data. There is no generation.
+Everything is hand-placed from published reference data. There is no generation. The marks paint on a 2D abstract canvas (immediate-mode egui painter through the `Camera2D` side view); this is presentation only with no value change, and there are still no meshes, textures, terrain, sky, or lighting.
 
 ## 8.3 Scope
 
