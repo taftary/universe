@@ -5,9 +5,11 @@
 //! `docs/tech/architecture.md`; the sim plus render thread split lands later,
 //! so one loop advances a fixed-step demo orbit and renders the shell here.
 //! Headless CI never opens a window: [`decide_launch`] requires the explicit
-//! [`RUN_WINDOW_FLAG`] plus a display. Keyboard widget input beyond `F3` and
-//! `Escape` stays deferred; pointer input plus those two router keys drive the
-//! ticker-only top bar meanwhile.
+//! [`RUN_WINDOW_FLAG`] plus a display. Keyboard widget input beyond `F3`,
+//! `Escape`, and the marks zoom keys (`+`, `-`, `0`) stays deferred; pointer
+//! input plus those router and zoom keys drive the ticker-only top bar
+//! meanwhile. Snapshot observe auto-selects the marks view every tick, so the
+//! frame always paints the regime-correct zoom-to-fit view.
 
 use std::future::Future;
 use std::pin::pin;
@@ -149,6 +151,18 @@ pub const RGB_CHANNEL_MAX_F64: f64 = 255.0;
 /// Source: winit default scale factor of 1.0.
 pub const FALLBACK_PIXELS_PER_POINT_F64: f64 = 1.0;
 
+/// Marks zoom step as a scale ratio per key press, dimensionless.
+///
+/// Each `+` press multiplies and each `-` press divides the manual zoom
+/// by this step; the marks clamp keeps the result inside its limits.
+/// Source: issue 52 step 3, hand-placed manual zoom step.
+pub const MARKS_ZOOM_STEP_RATIO_F64: f64 = 1.25;
+
+/// Compile-time check that the zoom step multiplies above unity.
+const _: () = {
+    assert!(MARKS_ZOOM_STEP_RATIO_F64 > 1.0);
+};
+
 /// X11 display environment variable name.
 ///
 /// Source: X11 convention; probed on every host in [`display_available`].
@@ -269,6 +283,36 @@ const QUARANTINED_DRIVER_VERSION_TEXT: &str = "31.0.101.2130";
 /// offset 0x64ea72; cause stays unconfirmed.
 const QUARANTINED_VULKAN_REASON_TEXT: &str =
     "igvk64.dll 31.0.101.2130 AV offset=0x64ea72 (#50 Step2)";
+
+/// Manual marks-zoom action from a zoom key press.
+///
+/// Zoom keys never touch sim state; they adjust the shell marks view
+/// only, per the read-only rule in `docs/tech/debug.md` section 2.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarksZoomAction {
+    /// Multiply the manual zoom by the step ratio.
+    ZoomIn,
+    /// Divide the manual zoom by the step ratio.
+    ZoomOut,
+    /// Clear the manual override and restore unity zoom.
+    Reset,
+}
+
+/// Map a key code to a marks zoom action, if any.
+///
+/// Pure mapper so headless tests cover it without a window: `+`
+/// ([`KeyCode::Equal`]) zooms in, `-` ([`KeyCode::Minus`]) zooms out,
+/// `0` ([`KeyCode::Digit0`]) resets. Router keys and every other key
+/// map to `None`.
+#[must_use]
+pub const fn marks_zoom_action_for_key(code: KeyCode) -> Option<MarksZoomAction> {
+    match code {
+        KeyCode::Equal => Some(MarksZoomAction::ZoomIn),
+        KeyCode::Minus => Some(MarksZoomAction::ZoomOut),
+        KeyCode::Digit0 => Some(MarksZoomAction::Reset),
+        _ => None,
+    }
+}
 
 /// Reason for staying headless without opening a window.
 ///
@@ -1405,11 +1449,12 @@ impl ActiveWindow {
         self.surface.configure(&self.device, &self.surface_config);
     }
 
-    /// Handle one keyboard event for the shell router only.
+    /// Handle one keyboard event for the shell router plus marks zoom.
     ///
     /// `F3` toggles focus and `Escape` returns to passthrough per
-    /// `docs/tech/debug.md` section 5; remaining keys stay deferred until
-    /// widget text input lands.
+    /// `docs/tech/debug.md` section 5; `+`, `-`, and `0` adjust the manual
+    /// marks zoom through [`marks_zoom_action_for_key`]. Remaining keys
+    /// stay deferred until widget text input lands.
     fn on_key(&mut self, event: &winit::event::KeyEvent) {
         if event.state != ElementState::Pressed || event.repeat {
             return;
@@ -1421,7 +1466,39 @@ impl ActiveWindow {
             PhysicalKey::Code(KeyCode::Escape) => {
                 self.shell.handle_key(RouterKey::Escape);
             }
-            _ => {}
+            PhysicalKey::Code(code) => {
+                if let Some(action) = marks_zoom_action_for_key(code) {
+                    self.apply_marks_zoom(action);
+                }
+            }
+            PhysicalKey::Unidentified(_) => {}
+        }
+    }
+
+    /// Apply one marks zoom action to the shell view.
+    ///
+    /// Zoom steps multiply or divide the current manual zoom by
+    /// [`MARKS_ZOOM_STEP_RATIO_F64`]; reset clears the manual override and
+    /// restores unity zoom. Shell state only; never writes sim state.
+    fn apply_marks_zoom(&mut self, action: MarksZoomAction) {
+        match action {
+            MarksZoomAction::ZoomIn => {
+                let zoomed_ratio_f64 =
+                    self.shell.shell().marks().zoom_factor_ratio_f64() * MARKS_ZOOM_STEP_RATIO_F64;
+                self.shell
+                    .shell_mut()
+                    .set_marks_zoom_factor_ratio_f64(zoomed_ratio_f64);
+            }
+            MarksZoomAction::ZoomOut => {
+                let zoomed_ratio_f64 =
+                    self.shell.shell().marks().zoom_factor_ratio_f64() / MARKS_ZOOM_STEP_RATIO_F64;
+                self.shell
+                    .shell_mut()
+                    .set_marks_zoom_factor_ratio_f64(zoomed_ratio_f64);
+            }
+            MarksZoomAction::Reset => {
+                self.shell.shell_mut().reset_marks_view();
+            }
         }
     }
 
@@ -1933,6 +2010,26 @@ mod tests {
                 .abs()
                 < POINTS_TOL_F32
         );
+    }
+
+    #[test]
+    fn marks_zoom_keys_map_to_zoom_actions_only() {
+        assert_eq!(
+            marks_zoom_action_for_key(KeyCode::Equal),
+            Some(MarksZoomAction::ZoomIn)
+        );
+        assert_eq!(
+            marks_zoom_action_for_key(KeyCode::Minus),
+            Some(MarksZoomAction::ZoomOut)
+        );
+        assert_eq!(
+            marks_zoom_action_for_key(KeyCode::Digit0),
+            Some(MarksZoomAction::Reset)
+        );
+        assert_eq!(marks_zoom_action_for_key(KeyCode::F3), None);
+        assert_eq!(marks_zoom_action_for_key(KeyCode::Escape), None);
+        assert_eq!(marks_zoom_action_for_key(KeyCode::KeyA), None);
+        assert_eq!(marks_zoom_action_for_key(KeyCode::Digit1), None);
     }
 
     #[test]

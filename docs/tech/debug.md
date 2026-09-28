@@ -42,16 +42,16 @@ Stack is egui 0.36.2 plus egui-wgpu immediate-mode, per D-005 in [tech.md](../te
 Render order per frame:
 
 1. Sim tick first. Fixed-step scheduler with accumulator advances `SIM_TICK_S` steps; render interpolates. Excess time is dropped with a counter, never spiraled; see [mobile.md](mobile.md). Warp 1x to 10000x under player control, with automatic drop to 1x on atmospheric entry, on approach to any body or object, and on any alarm, per [simulation.md](simulation.md).
-2. Game abstract-mark pass draws the [mvp.md](../topics/mvp.md) marks: star as point, planet as circle at real radius, atmosphere as concentric layer circles, orbits and trajectories as curves, ship and player as point, surface as grid.
+2. Game abstract-mark pass paints the [mvp.md](../topics/mvp.md) marks on the `CentralPanel` canvas through `MarksView` in `crates/debug/src/marks.rs`: star as point, planet as circle at real radius, atmosphere as concentric layer circles, orbit and trajectory as curves, ship and player as point, surface as grid. The view reads `SimSnapshot` copies only and never writes sim state. Trajectory history and screen-point scratch buffers pre-size at open and reuse after warmup per section 8.
 3. Debug-draw pass draws egui on top via egui-wgpu. No draw call outside `engine::render` or `debug` is allowed; see [architecture.md](architecture.md).
-4. Camera-relative conversion happens once in `engine::render`. Sim holds f64 (`DVec3`, `DQuat`); render uses f32. `SimSnapshot` crossing the boundary is plain data (`bytemuck` `Pod`). No `hecs` types in public APIs outside `engine::sim` per D-004. No f32 flows into sim.
+4. Camera-relative conversion happens once in `engine::render` through `Camera2D`: `world_to_screen` is the single f64 to f32 conversion point, with `convert_into` as its pre-sized batch form. Sim holds f64 (`DVec3`, `DQuat`); render uses f32. Side view is an orthographic projection onto the world `XY` plane with `Y` up in camera space; the canvas flips `Y` into egui points. Presets are `orbit_fit`, `entry_corridor`, and `surface_grid`. The camera rebuilds only on view, body radius, or manual zoom change and keeps scale plus center bit-identical within a view; only the viewport tracks the canvas rect. `SimSnapshot` crossing the boundary is plain data (`bytemuck` `Pod`). No `hecs` types in public APIs outside `engine::sim` per D-004. No f32 flows into sim.
 
 egui layer order inside the debug pass, using `egui::Area::Order`:
 
 - `Background`: full-screen dim only when a modal (bug-bundle export, replay load confirm) is open.
 - `TopBottomPanel`: top bar (section 4.1).
 - `SidePanel`: left frames plus overlays (section 4.2) and right inspector plus tweakables (section 4.3).
-- `CentralPanel`: never owned by the shell. The game view keeps `CentralPanel`; the shell docks around it and never covers it fully on desktop.
+- `CentralPanel`: game canvas owned by the game view, not the shell. `MarksView::draw` paints into its available rect with the immediate-mode painter when the preset shows the canvas (every preset except ticker-only) and a snapshot is present; ticker-only keeps top-bar text only and paints no canvas. The shell docks around the canvas and never covers it fully on desktop.
 - `Window`: determinism and replay panel, console window, modal dialogs. Collapsible and closable.
 - `Tooltip`: readout tooltips with unit, source, and budget fraction.
 - `Foreground`: taint badge, determinism-divergence flash, thermal-tier notice.
@@ -78,8 +78,8 @@ Single `TopBottomPanel::top` row, always visible when the shell is open:
 `SidePanel::left`, resizable, collapsible:
 
 - Frame tree: active center and frame path from Lv3 to Lv7 (`stellar`, `planetary`, `orbital`, `atmospheric`, `terrain`), with handoff boundaries marked. Lv8 shows as deferred stub. Lv1 to Lv2 show as backdrop asset, not simulation, per [architecture.md](architecture.md).
-- Overlays: toggles for each abstract mark class (star point, planet circle, atmosphere layer circles, orbit curves, trajectory curves, ship point, surface grid) plus per-overlay label density. Overlay toggles are safe and never taint.
-- Debug camera: follow target (ship, planet center, surface point), zoom to fit (orbit, entry corridor, surface grid), camera-relative origin age and distance to `ORIGIN_REBASE_DISTANCE_M = 5000.0 meters`. Camera moves never touch sim state.
+- Overlays: seven toggles, one per abstract mark class (`OverlayFlags` in `crates/debug/src/marks.rs`): star point, planet circle, atmosphere layer circles, orbit curve, trajectory curve, ship point, surface grid. Each toggle is a safe view that never taints the run and needs no pause. Per-overlay label density stays deferred.
+- Debug camera (`MarksView` plus `Camera2D`): zoom-to-fit views `OrbitFit`, `EntryCorridor`, and `SurfaceGrid`. Snapshot observe auto-selects the view from regime plus altitude in meters with a 2000.0 meters hysteresis band: surface regime selects the surface grid, orbit regime selects the orbit fit, otherwise altitudes above 120000.0 meters select the orbit fit and altitudes below 10000.0 meters select the surface grid, with the band holding the current view at each handoff so boundary noise never flickers; non-finite altitudes keep the current view. Manual `zoom_to_fit` pins one view until cleared. Manual zoom is a dimensionless scale ratio clamped to 0.25 through 4.0 with unity default; `+` (`Equal`) zooms in, `-` (`Minus`) zooms out by a 1.25 step, `0` (`Digit0`) clears the override and restores unity zoom. The left panel shows the active view label plus zoom ratio plus regime plus altitude in meters. Camera moves never touch sim state. Camera-relative origin age and distance to `ORIGIN_REBASE_DISTANCE_M = 5000.0 meters` are unchanged.
 - Regime indicator: current regime (orbit, atmosphere, surface) plus distance to next handoff in meters. Used for the continuity check.
 
 ### 4.3 Right: inspector and tweakables
@@ -125,10 +125,12 @@ Modes: `Passthrough` (game gets all input; shell shows badges only) and `Focused
 
 Default desktop layout docks four regions around the game `CentralPanel`: top bar, left panel, right panel, bottom tabs. Four presets switch visibility and size without changing content:
 
-- Descent: top bar plus bottom continuity plots plus left regime indicator. For pass/fail item 1 handoff watching in [mvp.md](../topics/mvp.md).
+- Descent: top bar plus `CentralPanel` marks canvas plus bottom continuity plots plus left regime indicator with overlays and view label. For pass/fail item 1 handoff watching in [mvp.md](../topics/mvp.md).
 - Determinism: top bar plus determinism window plus bottom tracing log plus input recorder. For pass/fail item 2 replay.
 - Budget: top bar plus bottom budget strip plus shell cost plus thermal tier. For pass/fail item 3 sustained runs.
-- Ticker-only: top bar alone with health ticker and badges. Minimal occlusion for pass/fail item 4 legibility runs.
+- Ticker-only: top bar alone with health ticker and badges and no canvas (text only). Minimal occlusion for pass/fail item 4 legibility runs.
+
+Canvas visibility follows `shows_marks_canvas_bool`: every preset except ticker-only paints the canvas; ticker-only skips it. Snapshot observe auto-selects the regime-correct zoom-to-fit view every tick with the section 4.2 hysteresis band, so the frame always paints the correct view without jumps. Marks zoom keys (`+`, `-`, `0`) adjust shell zoom only and never touch sim state. No 3D is involved; the canvas stays 2D abstract marks per section 10.
 
 Preset choice is shell state only and never persists per [persistence.md](persistence.md).
 

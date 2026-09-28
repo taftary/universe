@@ -15,6 +15,8 @@ mod inspect_view;
 mod layout;
 mod log;
 #[cfg(feature = "dev-shell")]
+mod marks;
+#[cfg(feature = "dev-shell")]
 mod os_window;
 mod shell;
 mod shell_cost;
@@ -827,6 +829,73 @@ fn print_dev_shell_snapshot_smoke(shell: &mut shell::Shell) {
                 mark = shell.inspect().mark_label(),
                 pick = shell.inspect().pick_valid()
             );
+            let overlays = shell.marks().overlays();
+            println!(
+                "marks history={len}/{cap} scale={scale} star={star} planet={planet} atmosphere={atmo} orbit={orbit} trajectory={traj} ship={ship} grid={grid} radius_m={radius}",
+                len = shell.marks().history_len_usize(),
+                cap = shell.marks().history_capacity_usize(),
+                scale = shell.marks().camera().scale_px_per_m_f64(),
+                star = overlays.star_bool,
+                planet = overlays.planet_bool,
+                atmo = overlays.atmosphere_bool,
+                orbit = overlays.orbit_bool,
+                traj = overlays.trajectory_bool,
+                ship = overlays.ship_bool,
+                grid = overlays.grid_bool,
+                radius = shell.body_radius_m_f64()
+            );
+            shell.marks_mut().set_overlays(marks::OverlayFlags::none());
+            println!(
+                "marks overlays_cleared={cleared}",
+                cleared =
+                    !shell.marks().overlays().planet_bool && !shell.marks().overlays().ship_bool
+            );
+            shell.marks_mut().set_overlays(overlays);
+            shell.set_overlay_star_bool(false);
+            shell.set_overlay_planet_bool(false);
+            shell.set_overlay_atmosphere_bool(false);
+            shell.set_overlay_orbit_bool(false);
+            shell.set_overlay_trajectory_bool(false);
+            shell.set_overlay_ship_bool(false);
+            shell.set_overlay_grid_bool(false);
+            println!(
+                "marks overlays_toggled_off={off} clean={clean}",
+                off = shell.marks().overlays() == marks::OverlayFlags::none(),
+                clean = shell.top_bar().is_clean()
+            );
+            shell.set_overlay_star_bool(true);
+            shell.set_overlay_planet_bool(true);
+            shell.set_overlay_atmosphere_bool(true);
+            shell.set_overlay_orbit_bool(true);
+            shell.set_overlay_trajectory_bool(true);
+            shell.set_overlay_ship_bool(true);
+            shell.set_overlay_grid_bool(true);
+            println!(
+                "marks overlays_toggled_on={on} clean={clean}",
+                on = shell.marks().overlays() == marks::OverlayFlags::all(),
+                clean = shell.top_bar().is_clean()
+            );
+            println!(
+                "marks view={view} zoom={zoom} manual={manual}",
+                view = shell.marks().view().label(),
+                zoom = shell.marks().zoom_factor_ratio_f64(),
+                manual = shell
+                    .marks()
+                    .manual_override()
+                    .map_or("auto", marks::ViewMode::label),
+            );
+            for mode in marks::ViewMode::ALL {
+                shell.zoom_marks_to_fit(mode);
+                println!(
+                    "marks manual_view={view}",
+                    view = shell.marks().view().label(),
+                );
+            }
+            shell.clear_marks_manual_override();
+            match shell.set_body_radius_m_f64(f64::NAN) {
+                Ok(()) => println!("marks_bad_radius_unexpected"),
+                Err(error) => println!("marks_bad_radius_error={error}"),
+            }
             print_desktop_tester_smoke(shell);
         }
         Err(error) => println!("shell_snapshot_error={error}"),

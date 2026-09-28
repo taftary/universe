@@ -229,6 +229,15 @@ impl PanelVisibility {
     pub const fn shows_bottom_tabs(self) -> bool {
         self.bits_u8 & BOTTOM_TABS_BIT_U8 != 0
     }
+
+    /// Report whether the marks canvas paints for this visibility.
+    ///
+    /// True for every preset except ticker-only per `docs/tech/debug.md` 6.1;
+    /// the game `CentralPanel` keeps the canvas while ticker-only keeps text.
+    #[must_use]
+    pub const fn shows_marks_canvas_bool(self) -> bool {
+        self.bits_u8 != TOP_BAR_BIT_U8
+    }
 }
 
 /// Desktop visibility preset switching size without content change.
@@ -1384,6 +1393,19 @@ mod tests {
             Some(PhoneTab::Log)
         );
         assert_eq!(DesktopPreset::TickerOnly.default_bottom_tab(), None);
+    }
+
+    #[test]
+    fn marks_canvas_shows_everywhere_but_ticker_only() {
+        assert!(PanelVisibility::for_preset(DesktopPreset::Descent).shows_marks_canvas_bool());
+        assert!(PanelVisibility::for_preset(DesktopPreset::Determinism).shows_marks_canvas_bool());
+        assert!(PanelVisibility::for_preset(DesktopPreset::Budget).shows_marks_canvas_bool());
+        assert!(!PanelVisibility::for_preset(DesktopPreset::TickerOnly).shows_marks_canvas_bool());
+        let descent = DesktopPreset::Descent.visibility();
+        assert!(descent.shows_top_bar());
+        assert!(descent.shows_left_panel());
+        assert!(descent.shows_bottom_tabs());
+        assert!(descent.shows_marks_canvas_bool());
     }
 
     #[test]
