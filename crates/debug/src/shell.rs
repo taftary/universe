@@ -1383,12 +1383,14 @@ impl Shell {
         }
     }
 
-    /// Draw the left overlay panel with regime plus safe toggles.
+    /// Draw the left overlay panel with regime, presets, plus safe toggles.
     ///
-    /// Shows the regime indicator with altitude plus one checkbox per
-    /// mark class. Checkboxes are safe views; they never taint the run
-    /// and need no pause. Available only with the non-default
-    /// `dev-shell` feature.
+    /// Shows the regime indicator with altitude, one 44pt preset button
+    /// per desktop preset, plus one checkbox per mark class. Preset
+    /// buttons mirror [`DesktopWindow::set_preset`]: visibility plus the
+    /// default bottom tab with no content change. Buttons plus checkboxes
+    /// are safe views; they never taint the run and need no pause.
+    /// Available only with the non-default `dev-shell` feature.
     #[cfg(feature = "dev-shell")]
     fn draw_left_overlays(&mut self, ui: &mut egui::Ui) {
         let regime_label: &'static str = self.inspect.regime_label();
@@ -1396,12 +1398,34 @@ impl Shell {
         let view_label: &'static str = self.marks.view().label();
         let zoom_factor_ratio_f64 = self.marks.zoom_factor_ratio_f64();
         let marks = &mut self.marks;
+        let mut pending_preset: Option<DesktopPreset> = None;
         egui::Panel::left("debug-left-overlays").show(ui, |ui| {
             ui.heading("Overlays");
             ui.label(format!(
                 "regime={regime_label} altitude_m={altitude_m_f64:.1}"
             ));
             ui.label(format!("view={view_label} zoom={zoom_factor_ratio_f64:.2}"));
+            ui.horizontal_wrapped(|ui| {
+                // 44pt touch floor per docs/tech/debug.md 6.2; egui points
+                // scale with pixels_per_point, so 44.0pt is the floor.
+                // Width fits the longest label at the default font.
+                let touch_pt_f32 = crate::layout::MIN_TOUCH_TARGET_PT_F32;
+                let button_size = egui::Vec2::new(touch_pt_f32 * 2.5, touch_pt_f32);
+                for preset in DesktopPreset::ALL {
+                    let label: &'static str = match preset {
+                        DesktopPreset::Descent => "Descent",
+                        DesktopPreset::Determinism => "Determinism",
+                        DesktopPreset::Budget => "Budget",
+                        DesktopPreset::TickerOnly => "TickerOnly",
+                    };
+                    if ui
+                        .add_sized(button_size, egui::Button::new(label))
+                        .clicked()
+                    {
+                        pending_preset = Some(preset);
+                    }
+                }
+            });
             ui.separator();
             ui.label("Toggles are safe; no taint, no pause needed.");
             let mut overlays = marks.overlays();
@@ -1414,6 +1438,12 @@ impl Shell {
             ui.checkbox(&mut overlays.grid_bool, "surface grid");
             marks.set_overlays(overlays);
         });
+        if let Some(preset) = pending_preset {
+            self.set_visibility(PanelVisibility::for_preset(preset));
+            if let Some(tab) = BottomTab::default_for_preset(preset) {
+                self.bottom.select(tab);
+            }
+        }
     }
 }
 

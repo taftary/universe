@@ -118,6 +118,8 @@ Modes: `Passthrough` (game gets all input; shell shows badges only) and `Focused
 - Routing rule: when `Focused`, the shell checks `ctx.wants_pointer_input()` and `ctx.wants_keyboard_input()` before the game consumes events. When either is true, the game sees no copy. When `Passthrough`, the shell consumes nothing except its toggle gesture.
 - Tap-pick: single tap in `Passthrough` with game handling still picks marks with point tolerance in points (scaled by `pixels_per_point`). In `Focused`, taps on widgets behave as UI; taps on the exposed game view still pick. Pick tolerance and picked mark kind are shown in the inspector so legibility checks can cite them.
 - Keyboard: console opens with backquote when `Focused`. All tweakable edits require pause; typing while running edits a draft only.
+- Preset keys: `1` (`Digit1`) selects Descent, `2` (`Digit2`) selects Determinism, `3` (`Digit3`) selects Budget, `4` (`Digit4`) selects Ticker-only. Main-row digits only; Numpad keys never select presets. Preset keys apply in both `Passthrough` and `Focused` without touching sim state. `F3` and `Escape` behavior is unchanged; marks zoom keys `+` (`Equal`), `-` (`Minus`), `0` (`Digit0`) are unchanged with no key overlap.
+- Preset buttons: the left-panel preset row (section 6.1) mirrors the keys through the same visibility plus default bottom tab application with no content change. Buttons are safe views; they never taint the run and need no pause.
 
 ## 6 Layouts
 
@@ -130,7 +132,9 @@ Default desktop layout docks four regions around the game `CentralPanel`: top ba
 - Budget: top bar plus bottom budget strip plus shell cost plus thermal tier. For pass/fail item 3 sustained runs.
 - Ticker-only: top bar alone with health ticker and badges and no canvas (text only). Minimal occlusion for pass/fail item 4 legibility runs.
 
-Canvas visibility follows `shows_marks_canvas_bool`: every preset except ticker-only paints the canvas; ticker-only skips it. Snapshot observe auto-selects the regime-correct zoom-to-fit view every tick with the section 4.2 hysteresis band, so the frame always paints the correct view without jumps. Marks zoom keys (`+`, `-`, `0`) adjust shell zoom only and never touch sim state. No 3D is involved; the canvas stays 2D abstract marks per section 10.
+A preset button row in the left panel below the active view label mirrors keys `1` to `4`: four 44 pt buttons labeled Descent, Determinism, Budget, TickerOnly apply the same visibility plus default bottom tab as the keys with no content change. Buttons are safe views; they never taint the run and need no pause.
+
+Canvas visibility follows `shows_marks_canvas_bool`: every preset except ticker-only paints the canvas; ticker-only skips it. Descent, Determinism, and Budget paint the `CentralPanel` marks canvas; ticker-only keeps top-bar text only and paints no canvas. Snapshot observe auto-selects the regime-correct zoom-to-fit view every tick with the section 4.2 hysteresis band, so the frame always paints the correct view without jumps. Marks zoom keys (`+`, `-`, `0`) adjust shell zoom only and never touch sim state. No 3D is involved; the canvas stays 2D abstract marks per section 10.
 
 Preset choice is shell state only and never persists per [persistence.md](persistence.md).
 

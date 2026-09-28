@@ -6,8 +6,8 @@
 //! so one loop advances a fixed-step demo orbit and renders the shell here.
 //! Headless CI never opens a window: [`decide_launch`] requires the explicit
 //! [`RUN_WINDOW_FLAG`] plus a display. Keyboard widget input beyond `F3`,
-//! `Escape`, and the marks zoom keys (`+`, `-`, `0`) stays deferred; pointer
-//! input plus those router and zoom keys drive the ticker-only top bar
+//! `Escape`, the marks zoom keys (`+`, `-`, `0`), and the preset keys
+//! (`1`-`4`) stays deferred; pointer input plus those router, zoom, and
 //! meanwhile. Snapshot observe auto-selects the marks view every tick, so the
 //! frame always paints the regime-correct zoom-to-fit view.
 
@@ -20,7 +20,7 @@ use std::time::Instant;
 
 use crate::budget::BudgetDenominators;
 use crate::input::RouterKey;
-use crate::layout::DESKTOP_WINDOW_TITLE;
+use crate::layout::{DESKTOP_WINDOW_TITLE, DesktopPreset};
 use crate::shell::{DesktopWindow, ShellError};
 use crate::theme::BASE_BACKGROUND_RGB_U8;
 use crate::top_bar::MILLIS_PER_SECOND_F64;
@@ -310,6 +310,23 @@ pub const fn marks_zoom_action_for_key(code: KeyCode) -> Option<MarksZoomAction>
         KeyCode::Equal => Some(MarksZoomAction::ZoomIn),
         KeyCode::Minus => Some(MarksZoomAction::ZoomOut),
         KeyCode::Digit0 => Some(MarksZoomAction::Reset),
+        _ => None,
+    }
+}
+
+/// Map a key code to a desktop preset, if any.
+///
+/// Pure mapper so headless tests cover it without a window: `1`
+/// ([`KeyCode::Digit1`]) selects descent, `2` selects determinism, `3`
+/// selects budget, and `4` selects ticker-only. Numpad keys plus every
+/// other key map to `None`.
+#[must_use]
+pub const fn preset_action_for_key(code: KeyCode) -> Option<DesktopPreset> {
+    match code {
+        KeyCode::Digit1 => Some(DesktopPreset::Descent),
+        KeyCode::Digit2 => Some(DesktopPreset::Determinism),
+        KeyCode::Digit3 => Some(DesktopPreset::Budget),
+        KeyCode::Digit4 => Some(DesktopPreset::TickerOnly),
         _ => None,
     }
 }
@@ -1453,8 +1470,10 @@ impl ActiveWindow {
     ///
     /// `F3` toggles focus and `Escape` returns to passthrough per
     /// `docs/tech/debug.md` section 5; `+`, `-`, and `0` adjust the manual
-    /// marks zoom through [`marks_zoom_action_for_key`]. Remaining keys
-    /// stay deferred until widget text input lands.
+    /// marks zoom through [`marks_zoom_action_for_key`], while `1` to `4`
+    /// select desktop presets through [`preset_action_for_key`]. Preset and
+    /// zoom keys apply in both router modes without touching sim state.
+    /// Remaining keys stay deferred until widget text input lands.
     fn on_key(&mut self, event: &winit::event::KeyEvent) {
         if event.state != ElementState::Pressed || event.repeat {
             return;
@@ -1467,6 +1486,10 @@ impl ActiveWindow {
                 self.shell.handle_key(RouterKey::Escape);
             }
             PhysicalKey::Code(code) => {
+                if let Some(preset) = preset_action_for_key(code) {
+                    self.shell.set_preset(preset);
+                    return;
+                }
                 if let Some(action) = marks_zoom_action_for_key(code) {
                     self.apply_marks_zoom(action);
                 }
@@ -2030,6 +2053,40 @@ mod tests {
         assert_eq!(marks_zoom_action_for_key(KeyCode::Escape), None);
         assert_eq!(marks_zoom_action_for_key(KeyCode::KeyA), None);
         assert_eq!(marks_zoom_action_for_key(KeyCode::Digit1), None);
+        assert_eq!(marks_zoom_action_for_key(KeyCode::Digit2), None);
+        assert_eq!(marks_zoom_action_for_key(KeyCode::Digit3), None);
+        assert_eq!(marks_zoom_action_for_key(KeyCode::Digit4), None);
+    }
+
+    #[test]
+    fn preset_keys_map_to_desktop_presets_only() {
+        assert_eq!(
+            preset_action_for_key(KeyCode::Digit1),
+            Some(DesktopPreset::Descent)
+        );
+        assert_eq!(
+            preset_action_for_key(KeyCode::Digit2),
+            Some(DesktopPreset::Determinism)
+        );
+        assert_eq!(
+            preset_action_for_key(KeyCode::Digit3),
+            Some(DesktopPreset::Budget)
+        );
+        assert_eq!(
+            preset_action_for_key(KeyCode::Digit4),
+            Some(DesktopPreset::TickerOnly)
+        );
+        assert_eq!(preset_action_for_key(KeyCode::Digit0), None);
+        assert_eq!(preset_action_for_key(KeyCode::Digit5), None);
+        assert_eq!(preset_action_for_key(KeyCode::Numpad1), None);
+        assert_eq!(preset_action_for_key(KeyCode::Numpad2), None);
+        assert_eq!(preset_action_for_key(KeyCode::Numpad3), None);
+        assert_eq!(preset_action_for_key(KeyCode::Numpad4), None);
+        assert_eq!(preset_action_for_key(KeyCode::Equal), None);
+        assert_eq!(preset_action_for_key(KeyCode::Minus), None);
+        assert_eq!(preset_action_for_key(KeyCode::F3), None);
+        assert_eq!(preset_action_for_key(KeyCode::Escape), None);
+        assert_eq!(preset_action_for_key(KeyCode::KeyA), None);
     }
 
     #[test]
