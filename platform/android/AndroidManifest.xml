@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Flight manifest for the on-device universe-debug binary.
+     GameActivity host for the winit event loop; minSdk 26 per
+     docs/tech/mobile.md. Vulkan is optional so GLES fallback keeps
+     Low-tier devices alive; no API below 26 is used without a
+     runtime probe plus fallback (see README.md). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-sdk
+        android:minSdkVersion="26"
+        android:targetSdkVersion="34" />
+
+    <!-- Optional hardware hints only; missing features disable paths. -->
+    <uses-feature
+        android:name="android.hardware.vulkan.version"
+        android:version="0x400003"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.opengles.aep"
+        android:required="false" />
+
+    <application
+        android:label="universe-debug"
+        android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
+        android:allowBackup="false">
+
+        <activity
+            android:name="androidx.games.activity.GameActivity"
+            android:exported="true"
+            android:launchMode="singleInstance"
+            android:configChanges="orientation|keyboard|keyboardHidden|screenSize|screenLayout|smallestScreenSize|density|uiMode"
+            android:screenOrientation="sensorLandscape">
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="universe_debug" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

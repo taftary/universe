@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Bundle identity for the universe-debug flight shell. -->
+    <key>CFBundleIdentifier</key>
+    <string>dev.universe.debug-flight</string>
+    <key>CFBundleName</key>
+    <string>universe-debug-flight</string>
+    <key>CFBundleVersion</key>
+    <string>0.1.0</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <!-- OS floor: iOS 15 minimum per docs/tech/mobile.md. No API below
+         this floor is used without a runtime probe plus fallback; see
+         FlightThermal.swift and README.md. -->
+    <key>MinimumOSVersion</key>
+    <string>15.0</string>
+    <key>UIDeviceFamily</key>
+    <array>
+        <integer>1</integer>
+        <integer>2</integer>
+    </array>
+    <!-- Metal is the wgpu backend on iOS per docs/tech/stack.md. -->
+    <key>UIRequiredDeviceCapabilities</key>
+    <array>
+        <string>metal</string>
+    </array>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+    </array>
+</dict>
+</plist>

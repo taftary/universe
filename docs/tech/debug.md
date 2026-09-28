@@ -2,7 +2,7 @@
 
 **Status:** Design for issue #14. Location `docs/tech/debug.md` is locked.
 **Spelling:** US English throughout (behavior, meters, kilometers, organize, color).
-**Last updated:** 2026-09-27.
+**Last updated:** 2026-09-28.
 **Scope:** Phone plus desktop shell for the stage-1 abstract-marks build in [mvp.md](../topics/mvp.md). Same shell on both; desktop is scaled up, never a separate shell.
 
 Gates and budgets live in [quality.md](quality.md). This file names constants only and does not duplicate gate tables.
@@ -286,6 +286,12 @@ Phone uses the same panels with a different arrangement:
 - Chip row: above the sheet, a horizontally scrolling chip row mirrors top-bar run control (pause, step, warp, auto-drop reason) for one-handed use.
 - Touch targets: all shell controls are at least 44 pt. Text scales with `ctx.pixels_per_point()`; plots keep a minimum 96 pt height at half detent. No control requires multi-finger input.
 - Performance: phone layout renders at most one plot tab at a time. Off-screen plots skip draw but keep recording into pre-sized buffers so continuity data is not lost.
+
+### 6.3 Flight log (issue #56)
+
+The shell records sustained phone runs in `FlightLog` (`crates/debug/src/flight_log.rs`): a pre-sized 2048-entry ring holding 900 samples at 1 Hz over 900 s with no gaps above 5 s, five budget channels (frame, sim average, sim p99, surface hitch p95, resident) plus thermal state, render tier, warp, seed, and hash per sample. Fractions reuse `BudgetStrip::fraction_of` with caller-passed denominators and cite `FRAME_BUDGET_MS`, `SIM_TICK_AVG_MS`, `SIM_TICK_P99_MS`, `SURFACE_HITCH_P95_MS`, `MEMORY_CEILING_MB`, and `COLD_START_S` by name only; gates live in [quality.md](quality.md). CSV export is header-first in `FLIGHT_LOG_HEADER` column order with hex hashes; the iOS runner header is byte-identical. The shared thermal controller (`crates/debug/src/bundle.rs`, 2.0 s poll) steps Fair down one tier and drops Serious or Critical to Low immediately with an instrument-grade notice; tiers stay render-only and sim hashes match across High, Medium, and Low. Bundles follow section 11 plus a `system.txt` companion and quarantine on checksum fail.
+
+Headless proof (measured 2026-09-28, `cargo test --features dev-shell --test flight_15min --test budget_flight`): 12/12 PASS. AC1 capture plus 900-tick cruise PASS; AC2 fractions plus schema PASS; AC3 downgrade policy plus Serious-to-Low PASS; AC4 tier-identical hashes plus golden digest PASS; AC5 bundle layout plus quarantine PASS; AC6 gates plus hygiene PASS. Live run stays UNPROVEN: no API26+ or iOS15+ device run yet; tracked OPEN in #48 alongside the reference-phone sustained run in section 13.
 
 ## 7 DevDark-Pro theme
 

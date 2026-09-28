@@ -1,0 +1,43 @@
+// App-level Gradle for the universe-debug flight binary.
+// minSdk 26 per docs/tech/mobile.md; targetSdk 34 mirrors
+// ANDROID_TARGET_SDK_API_U32 in crates/debug/src/android.rs.
+// The .so files come from crates/debug/build-android.sh (cargo-ndk)
+// and are packaged from src/main/jniLibs; no other native code ships.
+
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.universe.debug'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.universe.debug'
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName '0.1.0'
+
+        // Reference phone first; emulator ABI kept for headless checks.
+        ndk {
+            abiFilters 'arm64-v8a', 'x86_64'
+        }
+    }
+
+    sourceSets {
+        main {
+            manifest.srcFile 'AndroidManifest.xml'
+            jniLibs.srcDirs = ['src/main/jniLibs']
+        }
+    }
+
+    buildTypes {
+        debug {
+            debuggable true
+        }
+        release {
+            debuggable false
+        }
+    }
+}

@@ -4,12 +4,15 @@
 
 #![forbid(unsafe_code)]
 
+mod android;
 mod bottom;
 mod budget;
+mod bundle;
 mod console;
 mod continuity;
 mod determinism;
 mod export;
+mod flight_log;
 mod input;
 mod inspect_view;
 mod layout;
@@ -113,6 +116,9 @@ fn main() -> anyhow::Result<()> {
     print_input_smoke();
     print_inspect_smoke();
     print_shell_smoke();
+    print_flight_log_smoke();
+    print_android_smoke();
+    print_bundle_smoke();
     Ok(())
 }
 
@@ -715,6 +721,370 @@ fn print_shell_smoke() {
     }
 }
 
+/// Print flight-log core with named budgets plus CSV row.
+///
+/// Exercises the Step 1 append-only ring: one reading push, five
+/// fractions against the named phone budgets, plus header-first CSV.
+fn print_flight_log_smoke() {
+    use crate::budget::ThermalTier;
+    use crate::flight_log::{
+        FLIGHT_CHANNEL_COUNT_USIZE, FLIGHT_LOG_CAPACITY_ENTRIES_USIZE, FlightLog, ThermalState,
+    };
+
+    for state in ThermalState::ALL {
+        println!("flight_thermal {label}", label = state.label());
+    }
+    for tier in ThermalTier::ALL {
+        println!("flight_tier {label}", label = tier.label());
+    }
+    let mut log = FlightLog::new();
+    println!(
+        "flight_log empty={empty} cap={cap} channels={channels}",
+        empty = log.is_empty(),
+        cap = FLIGHT_LOG_CAPACITY_ENTRIES_USIZE,
+        channels = FLIGHT_CHANNEL_COUNT_USIZE
+    );
+    match log.push_reading(
+        SMOKE_TICK_COUNT_U64,
+        SMOKE_ELAPSED_S_F64,
+        SMOKE_FRAME_MS_F64,
+        flight_sim_avg_ms_f64(),
+        flight_sim_p99_ms_f64(),
+        flight_hitch_ms_f64(),
+        flight_resident_mb_f64(),
+        ThermalState::Nominal,
+        ThermalTier::Medium,
+        flight_warp_f64(),
+        SMOKE_SEED_U64,
+        SMOKE_HASH_U64,
+    ) {
+        Ok(()) => println!("flight_log entries={entries}", entries = log.len_usize()),
+        Err(error) => println!("flight_log_error={error}"),
+    }
+    match log.latest() {
+        Some(sample) => println!(
+            "flight_sample tick={tick} elapsed_s={elapsed} tier={tier} thermal={thermal} warp={warp}x seed={seed:04x} hash={hash:04x}",
+            tick = sample.tick_count_u64(),
+            elapsed = sample.elapsed_s_f64(),
+            tier = sample.tier().label(),
+            thermal = sample.thermal_state().label(),
+            warp = sample.warp_factor_f64(),
+            seed = crate::determinism::SeedTreeView::short_u16(sample.seed_u64()),
+            hash = crate::determinism::SeedTreeView::short_u16(sample.hash_u64())
+        ),
+        None => println!("flight_sample_missing"),
+    }
+    print_flight_fractions_smoke(&log);
+    print_flight_csv_smoke(&mut log);
+}
+
+/// Return the flight smoke sim average in milliseconds.
+fn flight_sim_avg_ms_f64() -> f64 {
+    2.0
+}
+
+/// Return the flight smoke sim p99 in milliseconds.
+fn flight_sim_p99_ms_f64() -> f64 {
+    4.0
+}
+
+/// Return the flight smoke hitch p95 in milliseconds.
+fn flight_hitch_ms_f64() -> f64 {
+    10.0
+}
+
+/// Return the flight smoke resident memory in megabytes.
+fn flight_resident_mb_f64() -> f64 {
+    256.0
+}
+
+/// Return the flight smoke warp factor, dimensionless.
+fn flight_warp_f64() -> f64 {
+    1.0
+}
+
+/// Print five flight fractions against the named phone budgets.
+///
+/// Smoke values only; gates live in `docs/tech/quality.md`.
+fn print_flight_fractions_smoke(log: &crate::flight_log::FlightLog) {
+    use crate::budget::BudgetDenominators;
+    use crate::flight_log::{
+        FLIGHT_CHANNEL_FRAME_USIZE, FLIGHT_CHANNEL_HITCH_USIZE, FLIGHT_CHANNEL_RESIDENT_USIZE,
+        FLIGHT_CHANNEL_SIM_AVG_USIZE, FLIGHT_CHANNEL_SIM_P99_USIZE, FlightLog,
+    };
+
+    match BudgetDenominators::new(33.33, 8.0, 16.0, 100.0, 1024.0, 5.0) {
+        Ok(budgets) => {
+            println!(
+                "flight_budgets frame_ms={frame} sim_avg_ms={avg} sim_p99_ms={p99} hitch_ms={hitch} memory_mb={mem} cold_start_s={cold}",
+                frame = budgets.frame_ms_f64(),
+                avg = budgets.sim_avg_ms_f64(),
+                p99 = budgets.sim_p99_ms_f64(),
+                hitch = budgets.hitch_ms_f64(),
+                mem = budgets.memory_mb_f64(),
+                cold = budgets.cold_start_s_f64()
+            );
+            match log.latest() {
+                Some(sample) => match FlightLog::fractions_of(sample, budgets) {
+                    Ok(fractions) => println!(
+                        "flight_fractions frame={frame:.4} sim_avg={avg:.4} sim_p99={p99:.4} hitch={hitch:.4} resident={res:.4} bands={b0}/{b1}/{b2}/{b3}/{b4}",
+                        frame = fractions[FLIGHT_CHANNEL_FRAME_USIZE].fraction_ratio_f64(),
+                        avg = fractions[FLIGHT_CHANNEL_SIM_AVG_USIZE].fraction_ratio_f64(),
+                        p99 = fractions[FLIGHT_CHANNEL_SIM_P99_USIZE].fraction_ratio_f64(),
+                        hitch = fractions[FLIGHT_CHANNEL_HITCH_USIZE].fraction_ratio_f64(),
+                        res = fractions[FLIGHT_CHANNEL_RESIDENT_USIZE].fraction_ratio_f64(),
+                        b0 = fractions[FLIGHT_CHANNEL_FRAME_USIZE].level().label(),
+                        b1 = fractions[FLIGHT_CHANNEL_SIM_AVG_USIZE].level().label(),
+                        b2 = fractions[FLIGHT_CHANNEL_SIM_P99_USIZE].level().label(),
+                        b3 = fractions[FLIGHT_CHANNEL_HITCH_USIZE].level().label(),
+                        b4 = fractions[FLIGHT_CHANNEL_RESIDENT_USIZE].level().label()
+                    ),
+                    Err(error) => println!("flight_fractions_error={error}"),
+                },
+                None => println!("flight_fractions_missing"),
+            }
+        }
+        Err(error) => println!("flight_budgets_error={error}"),
+    }
+}
+
+/// Print flight CSV rows plus range-check rejection and clear.
+fn print_flight_csv_smoke(log: &mut crate::flight_log::FlightLog) {
+    use crate::budget::ThermalTier;
+    use crate::flight_log::{FLIGHT_LOG_HEADER, FlightLog, FlightSample, ThermalState};
+
+    let csv = log.format_csv();
+    println!(
+        "flight_csv header_ok={header} rows={rows} bytes={bytes}",
+        header = csv.starts_with(FLIGHT_LOG_HEADER),
+        rows = log.len_usize(),
+        bytes = csv.len()
+    );
+    match FlightSample::new(
+        SMOKE_TICK_COUNT_U64,
+        SMOKE_ELAPSED_S_F64,
+        SMOKE_FRAME_MS_F64,
+        flight_sim_avg_ms_f64(),
+        flight_sim_p99_ms_f64(),
+        flight_hitch_ms_f64(),
+        flight_resident_mb_f64(),
+        ThermalState::Serious,
+        ThermalTier::Low,
+        flight_warp_f64(),
+        SMOKE_SEED_U64,
+        SMOKE_HASH_U64,
+    ) {
+        Ok(sample) => println!(
+            "flight_row frame_ms={frame} sim_avg_ms={avg} sim_p99_ms={p99} hitch_ms={hitch} resident_mb={res} csv_len={len}",
+            frame = sample.frame_ms_f64(),
+            avg = sample.sim_avg_ms_f64(),
+            p99 = sample.sim_p99_ms_f64(),
+            hitch = sample.hitch_p95_ms_f64(),
+            res = sample.resident_mb_f64(),
+            len = FlightLog::format_row_csv(sample).len()
+        ),
+        Err(error) => println!("flight_sample_error={error}"),
+    }
+    match FlightSample::new(
+        SMOKE_TICK_COUNT_U64,
+        f64::NAN,
+        SMOKE_FRAME_MS_F64,
+        flight_sim_avg_ms_f64(),
+        flight_sim_p99_ms_f64(),
+        flight_hitch_ms_f64(),
+        flight_resident_mb_f64(),
+        ThermalState::Nominal,
+        ThermalTier::Medium,
+        flight_warp_f64(),
+        SMOKE_SEED_U64,
+        SMOKE_HASH_U64,
+    ) {
+        Ok(_) => println!("flight_nan_unexpected"),
+        Err(error) => println!("flight_nan_error={error}"),
+    }
+    log.clear();
+    println!("flight_log cleared empty={empty}", empty = log.is_empty());
+}
+
+/// Print Android flight-shell pacer, threads, thermal, SDK, and capture.
+///
+/// Exercises the Step 2a headless policy: one frame plan at 1x, worker
+/// sizing from four cores, all seven thermal codes, the SDK floor, and
+/// the 15-minute capture fit.
+fn print_android_smoke() {
+    use crate::android::{ANDROID_MAX_SIM_STEPS_PER_FRAME_U32, FramePacer};
+
+    let mut pacer = FramePacer::new();
+    match pacer.observe_frame(
+        SMOKE_FRAME_MS_F64 / crate::top_bar::MILLIS_PER_SECOND_F64,
+        flight_warp_f64(),
+    ) {
+        Ok(plan) => println!(
+            "android_pacer steps={steps} sleep_s={sleep:.4} dropped_s={dropped:.4} budget_s={budget:.5} backlog_s={backlog:.4}",
+            steps = plan.sim_steps_u32(),
+            sleep = plan.sleep_s_f64(),
+            dropped = plan.dropped_s_f64(),
+            budget = FramePacer::frame_budget_s_f64(),
+            backlog = pacer.accumulator_s_f64()
+        ),
+        Err(error) => println!("android_pacer_error={error}"),
+    }
+    println!(
+        "android_pacer cap_steps={cap} dropped_total_s={total:.4}",
+        cap = ANDROID_MAX_SIM_STEPS_PER_FRAME_U32,
+        total = pacer.dropped_total_s_f64()
+    );
+    pacer.clear();
+    println!(
+        "android_pacer cleared backlog_s={backlog:.4}",
+        backlog = pacer.accumulator_s_f64()
+    );
+    print_android_threads_thermal_smoke();
+    print_android_sdk_capture_smoke();
+}
+/// Print Android thread sizing plus all seven thermal codes.
+///
+/// Smoke values only; gates live in `docs/tech/quality.md`.
+fn print_android_threads_thermal_smoke() {
+    use crate::android::{ThreadPlan, map_thermal_status, tier_for_thermal_state};
+
+    for available_usize in [1_usize, 2, 4, 8] {
+        match ThreadPlan::for_available_parallelism(available_usize) {
+            Ok(plan) => println!(
+                "android_threads avail={avail} sim={sim} render={render} workers={workers} low_tier={low}",
+                avail = available_usize,
+                sim = plan.sim_threads_usize(),
+                render = plan.render_threads_usize(),
+                workers = plan.worker_threads_usize(),
+                low = plan.fits_low_tier_cores()
+            ),
+            Err(error) => println!("android_threads_error={error}"),
+        }
+    }
+    for status_u32 in 0..=6_u32 {
+        match map_thermal_status(status_u32) {
+            Ok(state) => println!(
+                "android_thermal status={status_u32} state={state} tier={tier}",
+                state = state.label(),
+                tier = tier_for_thermal_state(state).label()
+            ),
+            Err(error) => println!("android_thermal_error={error}"),
+        }
+    }
+}
+
+/// Print Android SDK probe plus 1 Hz capture state.
+///
+/// Smoke values only; gates live in `docs/tech/quality.md`.
+fn print_android_sdk_capture_smoke() {
+    use crate::android::{
+        ANDROID_FLIGHT_CAPTURE_DURATION_S_F64, ANDROID_FLIGHT_CAPTURE_MIN_SAMPLES_USIZE,
+        ANDROID_MAX_CAPTURE_GAP_S_F64, ANDROID_MIN_SDK_API_U32, ANDROID_TARGET_SDK_API_U32,
+        FlightCapture, ThermalPoll, check_sdk, is_sdk_supported, thermal_api_available,
+    };
+
+    let mut poll = ThermalPoll::default();
+    match poll.should_poll(2.0) {
+        Ok(due) => println!(
+            "android_poll due={due} interval_s={interval} last_s={last:.1}",
+            interval = ThermalPoll::interval_s_f64(),
+            last = poll.last_poll_s_f64()
+        ),
+        Err(error) => println!("android_poll_error={error}"),
+    }
+    match check_sdk(25) {
+        Ok(()) => println!("android_sdk probe_25_unexpected_ok"),
+        Err(error) => println!("android_sdk probe_25={error}"),
+    }
+    match check_sdk(26) {
+        Ok(()) => println!(
+            "android_sdk min={min} target={target} supported_26={ok} thermal_api_28={old} thermal_api_29={new}",
+            min = ANDROID_MIN_SDK_API_U32,
+            target = ANDROID_TARGET_SDK_API_U32,
+            ok = is_sdk_supported(26),
+            old = thermal_api_available(28),
+            new = thermal_api_available(29)
+        ),
+        Err(error) => println!("android_sdk_error={error}"),
+    }
+    let mut capture = FlightCapture::new();
+    let gap_ok_bool = match FlightCapture::gap_ok(ANDROID_MAX_CAPTURE_GAP_S_F64) {
+        Ok(ok) => ok,
+        Err(error) => {
+            println!("android_gap_error={error}");
+            false
+        }
+    };
+    match capture.should_capture(1.0) {
+        Ok(due) => println!(
+            "android_capture due={due} last_s={last:.1} required={samples} duration_s={duration:.0} gap_ok={gap}",
+            last = capture.last_capture_s_f64(),
+            samples = FlightCapture::required_samples_usize(),
+            duration = ANDROID_FLIGHT_CAPTURE_DURATION_S_F64,
+            gap = gap_ok_bool
+        ),
+        Err(error) => println!("android_capture_error={error}"),
+    }
+    println!(
+        "android_capture min_samples={samples} fits_ring={fits} interval_s={interval}",
+        samples = ANDROID_FLIGHT_CAPTURE_MIN_SAMPLES_USIZE,
+        fits = FlightCapture::fits_in_flight_log(),
+        interval = FlightCapture::interval_s_f64()
+    );
+}
+
+/// Print thermal-bundle stepping plus system companion smoke.
+///
+/// Exercises the Step 2c shared controller: Fair steps High to Medium
+/// and Medium to Low, Serious forces Low with the instrument notice,
+/// and the section-11 `system.txt` companion formats.
+fn print_bundle_smoke() {
+    use crate::budget::ThermalTier;
+    use crate::bundle::{
+        THERMAL_POLL_S_F64, ThermalController, format_system_txt, next_tier_for_thermal_state,
+    };
+    use crate::flight_log::ThermalState;
+
+    println!("bundle thermal_poll_s={THERMAL_POLL_S_F64}");
+    for (start, state) in [
+        (ThermalTier::High, ThermalState::Fair),
+        (ThermalTier::Medium, ThermalState::Fair),
+        (ThermalTier::Medium, ThermalState::Serious),
+    ] {
+        let next = next_tier_for_thermal_state(start, state);
+        println!(
+            "bundle tier {prev}->{next} on {state}",
+            prev = start.label(),
+            next = next.label(),
+            state = state.label()
+        );
+    }
+    let mut controller = ThermalController::new();
+    let notice = controller.observe(ThermalState::Serious);
+    println!(
+        "bundle observe tier={tier} forced={forced} notice={notice}",
+        tier = notice.tier().label(),
+        forced = notice.forced_low_bool(),
+        notice = notice.notice().unwrap_or("none")
+    );
+    match format_system_txt(
+        "smoke-device",
+        "smoke-os-26",
+        "smoke-backend",
+        notice.tier(),
+        SMOKE_FRAME_MS_F64,
+        SMOKE_DRAW_MS_F64,
+        SMOKE_TICK_COUNT_U64,
+    ) {
+        Ok(text) => println!(
+            "bundle system lines={lines} bytes={bytes}",
+            lines = text.lines().count(),
+            bytes = text.len()
+        ),
+        Err(error) => println!("bundle_system_error={error}"),
+    }
+}
+
 /// Print channel, regime, level, and tier tables plus filter state.
 ///
 /// Available only with the non-default `dev-shell` feature.
@@ -994,6 +1364,7 @@ fn print_draw_export_smoke(
                     .last_report()
                     .map_or(0, determinism::ReplayReport::ticks_compared_u64)
             );
+            print_flight_draw_smoke(ctx, budgets);
         }
         Err(error) => println!("shell_budgets_error={error}"),
     }
@@ -1008,6 +1379,46 @@ fn print_draw_export_smoke(
         "replay health={health} clean={clean}",
         health = shell.top_bar().health_label(),
         clean = shell.top_bar().is_clean()
+    );
+}
+
+/// Draw one flight-log frame headlessly and print row state.
+///
+/// Available only with the non-default `dev-shell` feature.
+#[cfg(feature = "dev-shell")]
+fn print_flight_draw_smoke(ctx: &egui::Context, budgets: crate::budget::BudgetDenominators) {
+    let mut flight_log = crate::flight_log::FlightLog::new();
+    match flight_log.push_reading(
+        SMOKE_TICK_COUNT_U64,
+        SMOKE_ELAPSED_S_F64,
+        SMOKE_FRAME_MS_F64,
+        2.0,
+        4.0,
+        10.0,
+        256.0,
+        crate::flight_log::ThermalState::Nominal,
+        budget::ThermalTier::Medium,
+        1.0,
+        SMOKE_SEED_U64,
+        SMOKE_HASH_U64,
+    ) {
+        Ok(()) => println!(
+            "flight_log entries={entries}",
+            entries = flight_log.len_usize()
+        ),
+        Err(error) => println!("flight_log_error={error}"),
+    }
+    let mut flight_output = ctx.run_ui(egui::RawInput::default(), |ui| {
+        flight_log.draw(ui, budgets);
+    });
+    // Headless smoke has no renderer; Step 5 applies texture deltas.
+    flight_output.textures_delta.clear();
+    println!(
+        "flight_draw=ok rows={rows} header_ok={header}",
+        rows = flight_log.len_usize(),
+        header = flight_log
+            .format_csv()
+            .starts_with(crate::flight_log::FLIGHT_LOG_HEADER)
     );
 }
 
