@@ -4,6 +4,7 @@
 
 #![forbid(unsafe_code)]
 
+mod android;
 mod bottom;
 mod budget;
 mod console;
@@ -115,6 +116,7 @@ fn main() -> anyhow::Result<()> {
     print_inspect_smoke();
     print_shell_smoke();
     print_flight_log_smoke();
+    print_android_smoke();
     Ok(())
 }
 
@@ -900,6 +902,133 @@ fn print_flight_csv_smoke(log: &mut crate::flight_log::FlightLog) {
     }
     log.clear();
     println!("flight_log cleared empty={empty}", empty = log.is_empty());
+}
+
+/// Print Android flight-shell pacer, threads, thermal, SDK, and capture.
+///
+/// Exercises the Step 2a headless policy: one frame plan at 1x, worker
+/// sizing from four cores, all seven thermal codes, the SDK floor, and
+/// the 15-minute capture fit.
+fn print_android_smoke() {
+    use crate::android::{ANDROID_MAX_SIM_STEPS_PER_FRAME_U32, FramePacer};
+
+    let mut pacer = FramePacer::new();
+    match pacer.observe_frame(
+        SMOKE_FRAME_MS_F64 / crate::top_bar::MILLIS_PER_SECOND_F64,
+        flight_warp_f64(),
+    ) {
+        Ok(plan) => println!(
+            "android_pacer steps={steps} sleep_s={sleep:.4} dropped_s={dropped:.4} budget_s={budget:.5} backlog_s={backlog:.4}",
+            steps = plan.sim_steps_u32(),
+            sleep = plan.sleep_s_f64(),
+            dropped = plan.dropped_s_f64(),
+            budget = FramePacer::frame_budget_s_f64(),
+            backlog = pacer.accumulator_s_f64()
+        ),
+        Err(error) => println!("android_pacer_error={error}"),
+    }
+    println!(
+        "android_pacer cap_steps={cap} dropped_total_s={total:.4}",
+        cap = ANDROID_MAX_SIM_STEPS_PER_FRAME_U32,
+        total = pacer.dropped_total_s_f64()
+    );
+    pacer.clear();
+    println!(
+        "android_pacer cleared backlog_s={backlog:.4}",
+        backlog = pacer.accumulator_s_f64()
+    );
+    print_android_threads_thermal_smoke();
+    print_android_sdk_capture_smoke();
+}
+/// Print Android thread sizing plus all seven thermal codes.
+///
+/// Smoke values only; gates live in `docs/tech/quality.md`.
+fn print_android_threads_thermal_smoke() {
+    use crate::android::{ThreadPlan, map_thermal_status, tier_for_thermal_state};
+
+    for available_usize in [1_usize, 2, 4, 8] {
+        match ThreadPlan::for_available_parallelism(available_usize) {
+            Ok(plan) => println!(
+                "android_threads avail={avail} sim={sim} render={render} workers={workers} low_tier={low}",
+                avail = available_usize,
+                sim = plan.sim_threads_usize(),
+                render = plan.render_threads_usize(),
+                workers = plan.worker_threads_usize(),
+                low = plan.fits_low_tier_cores()
+            ),
+            Err(error) => println!("android_threads_error={error}"),
+        }
+    }
+    for status_u32 in 0..=6_u32 {
+        match map_thermal_status(status_u32) {
+            Ok(state) => println!(
+                "android_thermal status={status_u32} state={state} tier={tier}",
+                state = state.label(),
+                tier = tier_for_thermal_state(state).label()
+            ),
+            Err(error) => println!("android_thermal_error={error}"),
+        }
+    }
+}
+
+/// Print Android SDK probe plus 1 Hz capture state.
+///
+/// Smoke values only; gates live in `docs/tech/quality.md`.
+fn print_android_sdk_capture_smoke() {
+    use crate::android::{
+        ANDROID_FLIGHT_CAPTURE_DURATION_S_F64, ANDROID_FLIGHT_CAPTURE_MIN_SAMPLES_USIZE,
+        ANDROID_MAX_CAPTURE_GAP_S_F64, ANDROID_MIN_SDK_API_U32, ANDROID_TARGET_SDK_API_U32,
+        FlightCapture, ThermalPoll, check_sdk, is_sdk_supported, thermal_api_available,
+    };
+
+    let mut poll = ThermalPoll::default();
+    match poll.should_poll(2.0) {
+        Ok(due) => println!(
+            "android_poll due={due} interval_s={interval} last_s={last:.1}",
+            interval = ThermalPoll::interval_s_f64(),
+            last = poll.last_poll_s_f64()
+        ),
+        Err(error) => println!("android_poll_error={error}"),
+    }
+    match check_sdk(25) {
+        Ok(()) => println!("android_sdk probe_25_unexpected_ok"),
+        Err(error) => println!("android_sdk probe_25={error}"),
+    }
+    match check_sdk(26) {
+        Ok(()) => println!(
+            "android_sdk min={min} target={target} supported_26={ok} thermal_api_28={old} thermal_api_29={new}",
+            min = ANDROID_MIN_SDK_API_U32,
+            target = ANDROID_TARGET_SDK_API_U32,
+            ok = is_sdk_supported(26),
+            old = thermal_api_available(28),
+            new = thermal_api_available(29)
+        ),
+        Err(error) => println!("android_sdk_error={error}"),
+    }
+    let mut capture = FlightCapture::new();
+    let gap_ok_bool = match FlightCapture::gap_ok(ANDROID_MAX_CAPTURE_GAP_S_F64) {
+        Ok(ok) => ok,
+        Err(error) => {
+            println!("android_gap_error={error}");
+            false
+        }
+    };
+    match capture.should_capture(1.0) {
+        Ok(due) => println!(
+            "android_capture due={due} last_s={last:.1} required={samples} duration_s={duration:.0} gap_ok={gap}",
+            last = capture.last_capture_s_f64(),
+            samples = FlightCapture::required_samples_usize(),
+            duration = ANDROID_FLIGHT_CAPTURE_DURATION_S_F64,
+            gap = gap_ok_bool
+        ),
+        Err(error) => println!("android_capture_error={error}"),
+    }
+    println!(
+        "android_capture min_samples={samples} fits_ring={fits} interval_s={interval}",
+        samples = ANDROID_FLIGHT_CAPTURE_MIN_SAMPLES_USIZE,
+        fits = FlightCapture::fits_in_flight_log(),
+        interval = FlightCapture::interval_s_f64()
+    );
 }
 
 /// Print channel, regime, level, and tier tables plus filter state.
