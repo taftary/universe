@@ -19,6 +19,8 @@ use std::thread;
 use std::time::Instant;
 
 use crate::budget::BudgetDenominators;
+use crate::bundle::ThermalController;
+use crate::flight_log::ThermalState;
 use crate::input::RouterKey;
 use crate::layout::{DESKTOP_WINDOW_TITLE, DesktopPreset};
 use crate::shell::{DesktopWindow, ShellError};
@@ -249,6 +251,11 @@ const BACKEND_SCORE_OTHER_U8: u8 = 0;
 /// Source: this module only; tags the conservative device request so
 /// driver logs point at the OS window path.
 const DEVICE_LABEL: &str = "universe-os-window";
+
+/// Tracing-log module tag for thermal notices, dimensionless text.
+///
+/// Source: this module only; short tag for the instrument-grade line.
+const THERMAL_LOG_MODULE_TEXT: &str = "thermal";
 
 /// Intel PCI vendor ID, dimensionless.
 ///
@@ -677,6 +684,16 @@ pub fn display_available() -> bool {
 pub fn display_available_with(display_value: Option<&str>, wayland_value: Option<&str>) -> bool {
     display_value.is_some_and(|value| !value.is_empty())
         || wayland_value.is_some_and(|value| !value.is_empty())
+}
+
+/// Read the desktop thermal state for one poll.
+///
+/// Desktop has no thermal sensor, so this always returns nominal; the
+/// Android JNI bridge and the iOS poller feed real states through the
+/// same bundle controller. Pure seam so headless tests cover it.
+#[must_use]
+fn desktop_thermal_state() -> ThermalState {
+    ThermalState::Nominal
 }
 
 /// Build the `NoAdapter` detail from a wgpu report.
@@ -1342,6 +1359,8 @@ struct ActiveWindow {
     shell: DesktopWindow,
     /// Budget denominators passed at draw time, never stored elsewhere.
     budgets: BudgetDenominators,
+    /// Render-only thermal controller polled every 2.0 s.
+    thermal: ThermalController,
     /// Demo orbit behind the shell snapshots.
     sim: SimDriver,
     /// Accumulated input drained per redraw.
@@ -1447,6 +1466,7 @@ impl ActiveWindow {
             egui,
             shell,
             budgets,
+            thermal: ThermalController::new(),
             sim,
             input: InputAccum::default(),
             clocks: FrameClocks::start_now(),
@@ -1697,6 +1717,7 @@ impl ActiveWindow {
     /// Returns [`OsWindowError`] for sim, snapshot, or shell failures.
     fn redraw(&mut self) -> Result<(), OsWindowError> {
         self.tick_clocks();
+        self.poll_thermal();
         self.advance_sim()?;
         let size = self.window.inner_size();
         if size.width < MIN_SURFACE_EXTENT_PX_U32 || size.height < MIN_SURFACE_EXTENT_PX_U32 {
@@ -1728,6 +1749,48 @@ impl ActiveWindow {
                 .shell_mut()
                 .budget_strip_mut()
                 .set_frame_ms_f64(frame_ms_f64);
+        }
+    }
+
+    /// Poll the thermal state on the 2.0 s bundle cadence.
+    ///
+    /// Desktop has no thermal sensor, so the observed state is always
+    /// [`ThermalState::Nominal`] and the tier holds; the poll still
+    /// proves the cadence plus the render-only application path that
+    /// the phone bridges drive with real states.
+    fn poll_thermal(&mut self) {
+        let now_s_f64 = self.clocks.elapsed_s_f64;
+        let Ok(due_bool) = self.thermal.should_poll(now_s_f64) else {
+            return;
+        };
+        if due_bool {
+            self.observe_thermal_state(desktop_thermal_state());
+        }
+    }
+
+    /// Apply one thermal state render-only to the budget strip.
+    ///
+    /// Steps the tier through [`ThermalController`]; sim behavior is
+    /// unchanged across tiers. A Serious or Critical transition into
+    /// Low posts the instrument notice to the tracing log, never as
+    /// a dialog.
+    fn observe_thermal_state(&mut self, state: ThermalState) {
+        let notice = self.thermal.observe(state);
+        self.shell
+            .shell_mut()
+            .budget_strip_mut()
+            .set_thermal_tier(notice.tier());
+        if let Some(line) = notice.notice() {
+            tracing::info!("os_window thermal {line}");
+            let tick_count_u64 = self.shell.shell().top_bar().tick_count_u64();
+            if let Err(error) = self.shell.shell_mut().trace_log_mut().push(
+                tick_count_u64,
+                crate::log::LogLevel::Warn,
+                THERMAL_LOG_MODULE_TEXT,
+                line,
+            ) {
+                tracing::warn!("os_window thermal log push failed: {error}");
+            }
         }
     }
 
@@ -2603,5 +2666,48 @@ mod tests {
         assert_eq!(delta.free.len(), 1);
         delta.clear();
         assert!(delta.is_empty());
+    }
+
+    #[test]
+    fn thermal_poll_matches_bundle_two_second_cadence() {
+        const POLL_TOL_S_F64: f64 = 1e-12;
+        assert!((crate::bundle::THERMAL_POLL_S_F64 - 2.0).abs() < POLL_TOL_S_F64);
+        assert!(
+            (ThermalController::interval_s_f64()
+                - crate::android::ANDROID_THERMAL_POLL_INTERVAL_S_F64)
+                .abs()
+                < POLL_TOL_S_F64
+        );
+    }
+
+    #[test]
+    fn desktop_thermal_state_stays_nominal_without_sensor() {
+        assert_eq!(desktop_thermal_state(), ThermalState::Nominal);
+        assert_eq!(ThermalState::Nominal.label(), "nominal");
+    }
+
+    #[test]
+    fn thermal_notice_tag_fits_log_module_cap() {
+        assert!(!THERMAL_LOG_MODULE_TEXT.is_empty());
+        assert!(THERMAL_LOG_MODULE_TEXT.len() <= crate::log::LOG_MODULE_CAP_BYTES_USIZE);
+    }
+
+    #[test]
+    fn thermal_tier_applies_render_only_to_headless_shell() {
+        let Ok(mut shell) = crate::shell::Shell::new() else {
+            panic!("smoke shell must build")
+        };
+        let tick_before_u64 = shell.top_bar().tick_count_u64();
+        let mut controller = ThermalController::new();
+        assert_eq!(controller.tier(), crate::budget::ThermalTier::Medium);
+        let notice = controller.observe(ThermalState::Serious);
+        shell.budget_strip_mut().set_thermal_tier(notice.tier());
+        assert_eq!(
+            shell.budget_strip().thermal_tier(),
+            crate::budget::ThermalTier::Low
+        );
+        assert_eq!(shell.top_bar().tick_count_u64(), tick_before_u64);
+        assert!(notice.forced_low_bool());
+        assert!(notice.notice().is_some());
     }
 }

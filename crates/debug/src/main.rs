@@ -7,6 +7,7 @@
 mod android;
 mod bottom;
 mod budget;
+mod bundle;
 mod console;
 mod continuity;
 mod determinism;
@@ -117,6 +118,7 @@ fn main() -> anyhow::Result<()> {
     print_shell_smoke();
     print_flight_log_smoke();
     print_android_smoke();
+    print_bundle_smoke();
     Ok(())
 }
 
@@ -1029,6 +1031,58 @@ fn print_android_sdk_capture_smoke() {
         fits = FlightCapture::fits_in_flight_log(),
         interval = FlightCapture::interval_s_f64()
     );
+}
+
+/// Print thermal-bundle stepping plus system companion smoke.
+///
+/// Exercises the Step 2c shared controller: Fair steps High to Medium
+/// and Medium to Low, Serious forces Low with the instrument notice,
+/// and the section-11 `system.txt` companion formats.
+fn print_bundle_smoke() {
+    use crate::budget::ThermalTier;
+    use crate::bundle::{
+        THERMAL_POLL_S_F64, ThermalController, format_system_txt, next_tier_for_thermal_state,
+    };
+    use crate::flight_log::ThermalState;
+
+    println!("bundle thermal_poll_s={THERMAL_POLL_S_F64}");
+    for (start, state) in [
+        (ThermalTier::High, ThermalState::Fair),
+        (ThermalTier::Medium, ThermalState::Fair),
+        (ThermalTier::Medium, ThermalState::Serious),
+    ] {
+        let next = next_tier_for_thermal_state(start, state);
+        println!(
+            "bundle tier {prev}->{next} on {state}",
+            prev = start.label(),
+            next = next.label(),
+            state = state.label()
+        );
+    }
+    let mut controller = ThermalController::new();
+    let notice = controller.observe(ThermalState::Serious);
+    println!(
+        "bundle observe tier={tier} forced={forced} notice={notice}",
+        tier = notice.tier().label(),
+        forced = notice.forced_low_bool(),
+        notice = notice.notice().unwrap_or("none")
+    );
+    match format_system_txt(
+        "smoke-device",
+        "smoke-os-26",
+        "smoke-backend",
+        notice.tier(),
+        SMOKE_FRAME_MS_F64,
+        SMOKE_DRAW_MS_F64,
+        SMOKE_TICK_COUNT_U64,
+    ) {
+        Ok(text) => println!(
+            "bundle system lines={lines} bytes={bytes}",
+            lines = text.lines().count(),
+            bytes = text.len()
+        ),
+        Err(error) => println!("bundle_system_error={error}"),
+    }
 }
 
 /// Print channel, regime, level, and tier tables plus filter state.
