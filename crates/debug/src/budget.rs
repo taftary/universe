@@ -143,6 +143,42 @@ impl BudgetDenominators {
             cold_start_s_f64,
         })
     }
+
+    /// Return the frame budget in milliseconds.
+    #[must_use]
+    pub const fn frame_ms_f64(self) -> f64 {
+        self.frame_ms_f64
+    }
+
+    /// Return the sim tick average budget in milliseconds.
+    #[must_use]
+    pub const fn sim_avg_ms_f64(self) -> f64 {
+        self.sim_avg_ms_f64
+    }
+
+    /// Return the sim tick p99 budget in milliseconds.
+    #[must_use]
+    pub const fn sim_p99_ms_f64(self) -> f64 {
+        self.sim_p99_ms_f64
+    }
+
+    /// Return the surface hitch p95 budget in milliseconds.
+    #[must_use]
+    pub const fn hitch_ms_f64(self) -> f64 {
+        self.hitch_ms_f64
+    }
+
+    /// Return the memory ceiling in megabytes.
+    #[must_use]
+    pub const fn memory_mb_f64(self) -> f64 {
+        self.memory_mb_f64
+    }
+
+    /// Return the cold-start budget in seconds.
+    #[must_use]
+    pub const fn cold_start_s_f64(self) -> f64 {
+        self.cold_start_s_f64
+    }
 }
 
 /// Budget strip with latest samples plus a thermal tier.
