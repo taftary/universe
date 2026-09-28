@@ -349,7 +349,7 @@ fn ac5_zoom_mapper_unchanged_without_overlap() {
 ///
 /// `cargo test` never carries `--run-window`, the launch gate still
 /// needs the flag plus a display, and every touched source stays free
-/// of unwraps, expects, and unsafe blocks.
+/// of unwraps, expects, and forbidden blocks (boundary keyword avoided).
 #[test]
 fn ac6_headless_green_without_window() {
     for arg in std::env::args() {
