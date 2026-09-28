@@ -21,6 +21,8 @@ Orbital mechanics on levels 3-5 are Keplerian two-body arcs with patched-conics 
 
 M1 note: `SimSnapshot` (#32) carries the active frame path (frame level, depth, body ids) as read-only dev-shell transport; it observes Lv3-Lv7 handoffs and changes no level, extent, or handoff rule above.
 
+M1 flight note (#56): the 15-minute flight-log gate steps a 250 km Mars-like cruise profile (Lv5 orbital expanse) for 900 ticks at 1 Hz with no gaps above 5 s; per-tick hashes match across High, Medium, and Low render tiers, so tiers never move sim state across the Lv3-Lv7 handoffs above. Headless 12/12 PASS with `dev-shell` (`tests/flight_15min.rs`, `tests/budget_flight.rs`); live phone run stays OPEN in #48. Budgets cited by name only; gates live in `docs/tech/quality.md`.
+
 Reference gravitational parameters in cubic meters per square second and semi-major axes in meters for hand-placed bodies and tests. This table is the only copy of these values in `docs/topics/`; `mvp.md` points here and does not duplicate them.
 
 | Body | Parameter | Value |
